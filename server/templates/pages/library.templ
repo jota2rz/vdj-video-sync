@@ -1,0 +1,68 @@
+package pages
+
+import (
+	"github.com/jota2rz/vdj-video-sync/server/templates/layouts"
+	"github.com/jota2rz/vdj-video-sync/server/templates/components"
+)
+
+templ Library() {
+	@layouts.Base("Library") {
+		@components.Header("library")
+		@LibraryContent()
+		@components.ControlBar()
+	}
+}
+
+templ LibraryContent() {
+	<main id="spa-content" class="flex-1 flex flex-col p-6 gap-4 overflow-hidden">
+		<div class="flex items-center gap-2 shrink-0">
+			<div class="flex gap-1 bg-gray-800 rounded-lg p-1">
+				<button data-library-tab="song" class="px-3 py-1 rounded text-sm bg-gray-700 text-white">Song Videos</button>
+				<button data-library-tab="transition" class="px-3 py-1 rounded text-sm text-gray-400 hover:text-white">Transition Videos</button>
+			</div>
+		</div>
+		<div class="flex flex-1 gap-4 min-h-0">
+			<div class="w-1/2 flex flex-col gap-2 min-h-0">
+				<input
+					type="text"
+					id="video-search"
+					placeholder="Search videos…"
+					class="px-3 py-1.5 rounded-lg bg-gray-800 text-sm text-gray-200 placeholder-gray-500 border border-gray-700 focus:border-blue-500 focus:outline-none w-full shrink-0"
+				/>
+				<div id="video-list" class="flex-1 overflow-y-auto rounded-lg bg-gray-900 border border-gray-800 divide-y divide-gray-800">
+					<p class="p-4 text-gray-500 text-sm">Loading…</p>
+				</div>
+			</div>
+			<div class="w-1/2 min-w-0 flex flex-col gap-3">
+				<div class="relative aspect-video bg-black rounded-lg overflow-hidden">
+					<video id="video-preview" class="w-full h-full object-contain hidden" muted loop playsinline></video>
+					<div id="preview-placeholder" class="absolute inset-0 flex items-center justify-center text-gray-600 text-sm">
+						Select a video to preview
+					</div>
+				</div>
+				<p id="preview-name" class="text-sm text-gray-300 text-center break-words hidden"></p>
+				<button
+					id="force-video-btn"
+					disabled
+					class="hidden px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors w-full"
+				>
+					Force Master Video
+				</button>
+				<div id="force-deck-btns" class="hidden grid grid-cols-4 gap-2">
+					<button data-force-deck="1" disabled class="px-2 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs rounded-lg transition-colors">
+						Force Deck 1
+					</button>
+					<button data-force-deck="2" disabled class="px-2 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs rounded-lg transition-colors">
+						Force Deck 2
+					</button>
+					<button data-force-deck="3" disabled class="px-2 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs rounded-lg transition-colors">
+						Force Deck 3
+					</button>
+					<button data-force-deck="4" disabled class="px-2 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs rounded-lg transition-colors">
+						Force Deck 4
+					</button>
+				</div>
+			</div>
+		</div>
+	</main>
+}

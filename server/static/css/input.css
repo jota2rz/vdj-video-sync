@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@keyframes deck-pulse {
+  0%, 100% { background-color: rgb(17 24 39); }
+  50%      { background-color: rgb(30 41 59); }
+}
+
+@keyframes deck-pulse-in {
+  0%   { background-color: rgb(17 24 39); border-color: rgb(31 41 55); }
+  100% { background-color: rgb(30 41 59); border-color: rgb(99 102 241); }
+}
+
+@keyframes deck-pulse-out {
+  0%   { background-color: rgb(30 41 59); border-color: rgb(99 102 241); }
+  100% { background-color: rgb(17 24 39); border-color: rgb(31 41 55); }
+}
+
+.deck-pulse-in {
+  animation: deck-pulse-in 0.6s ease-in forwards;
+}
+
+.deck-active-pulse {
+  animation: deck-pulse 2s ease-in-out infinite;
+  border-color: rgb(99 102 241); /* indigo-500 */
+}
+
+.deck-pulse-out {
+  animation: deck-pulse-out 0.6s ease-out forwards;
+}
+
+/* Smooth column split transitions for deck columns */
+@media (min-width: 768px) {
+  #deck-status > [data-deck-col] {
+    flex: 0 1 50%;
+    min-width: 0;
+    overflow: hidden;
+    transition: flex-basis 0.35s ease, opacity 0.35s ease;
+  }
+}
+
+/* Lock per-deck video preview width (set dynamically by JS), centered */
+.deck-video-wrap {
+  margin-left: auto;
+  margin-right: auto;
+  transition: width 0.35s ease;
+}
+

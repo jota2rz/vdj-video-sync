@@ -1,0 +1,50 @@
+# ── C++ Plugin ───────────────────────────────
+plugin/build/
+plugin/out/
+plugin/vendor/httplib.h
+*.obj
+*.o
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.suo
+*.user
+*.sdf
+*.opensdf
+*.ncb
+.vs/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# ── Go Server ────────────────────────────────
+server/tmp/
+server/static/css/output.css
+server/*_templ.go
+
+# Go binaries
+*.exe
+*.exe~
+server/vdj-video-sync-server
+__debug_bin*
+
+# SQLite database
+*.db
+*.db-shm
+*.db-wal
+
+# ── OS / Editor ──────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# ── Excluded folders (legal / legacy) ────────
+VirtualDJ8_SDK_20211003/
+previous-prototype/
+mp4-samples/

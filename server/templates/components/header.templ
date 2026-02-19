@@ -1,0 +1,140 @@
+package components
+
+templ Header(activePage string) {
+	<nav id="spa-nav" class="border-b border-gray-800 bg-gray-900">
+		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+			<div class="flex h-14 items-center justify-between">
+				<div class="flex items-center gap-2">
+					<span class="text-lg font-bold text-white">VDJ Video Sync</span>
+					<span id="sse-status" class="ml-2 flex items-center gap-1 text-xs font-medium text-yellow-400">
+						<svg id="sse-spinner" class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+						</svg>
+						<span id="sse-status-text">CONNECTING...</span>
+					</span>
+				</div>
+				<div class="flex items-center gap-4">
+					<a
+						href="/dashboard"
+						data-spa-link
+						class={ "px-3 py-2 rounded-md text-sm font-medium",
+							templ.KV("bg-gray-800 text-white", activePage == "dashboard"),
+							templ.KV("text-gray-300 hover:bg-gray-700 hover:text-white", activePage != "dashboard") }
+					>
+						Dashboard
+					</a>
+					<a
+						href="/library"
+						data-spa-link
+						class={ "px-3 py-2 rounded-md text-sm font-medium",
+							templ.KV("bg-gray-800 text-white", activePage == "library"),
+							templ.KV("text-gray-300 hover:bg-gray-700 hover:text-white", activePage != "library") }
+					>
+						Library
+					</a>
+					<a
+						href="/player"
+						target="_blank"
+						class={ "px-3 py-2 rounded-md text-sm font-medium inline-flex items-center gap-1",
+							templ.KV("bg-gray-800 text-white", activePage == "player"),
+							templ.KV("text-gray-300 hover:bg-gray-700 hover:text-white", activePage != "player") }
+					>
+						Player
+						<svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"></path>
+						</svg>
+					</a>
+					<!-- Settings gear icon -->
+					<button
+						id="settings-btn"
+						type="button"
+						class="ml-2 p-2 rounded-md text-gray-400 hover:bg-gray-700 hover:text-white focus:outline-none"
+						title="Settings"
+					>
+						<svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"></path>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"></path>
+						</svg>
+					</button>
+					<!-- Shutdown button -->
+					<button
+						id="shutdown-btn"
+						type="button"
+						class="p-2 rounded-md text-gray-400 hover:bg-red-900 hover:text-red-300 focus:outline-none"
+						title="Shutdown Server"
+					>
+						<svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z"></path>
+						</svg>
+					</button>
+				</div>
+			</div>
+		</div>
+	</nav>
+	<!-- Settings Modal (hidden by default) -->
+	<div id="settings-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+		<!-- Backdrop -->
+		<div id="settings-backdrop" class="absolute inset-0 bg-gray-950/80"></div>
+		<!-- Modal panel -->
+		<div class="relative w-full max-w-md rounded-lg bg-gray-900 border border-gray-700 shadow-xl p-6 space-y-4">
+			<div class="flex items-center justify-between mb-2">
+				<h3 class="text-lg font-semibold text-white">Settings</h3>
+				<button id="settings-close" type="button" class="text-gray-400 hover:text-white">
+					<svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"></path>
+					</svg>
+				</button>
+			</div>
+			<div>
+				<label for="settings-videos-dir" class="block text-sm font-medium text-gray-300 mb-1">
+					Song Videos Directory
+				</label>
+				<input
+					type="text"
+					id="settings-videos-dir"
+					data-config-key="videos_dir"
+					class="w-full rounded-md bg-gray-800 border border-gray-700 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+					placeholder="./videos"
+				/>
+			</div>
+			<div>
+				<label for="settings-transition-dir" class="block text-sm font-medium text-gray-300 mb-1">
+					Transition Videos Directory
+				</label>
+				<input
+					type="text"
+					id="settings-transition-dir"
+					data-config-key="transition_videos_dir"
+					class="w-full rounded-md bg-gray-800 border border-gray-700 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+					placeholder="./transition-videos"
+				/>
+			</div>
+			<button
+				id="save-settings"
+				class="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 focus:outline-none"
+			>
+				Save Settings
+			</button>
+		</div>
+	</div>
+	<!-- Shutdown Confirmation Modal (hidden by default) -->
+	<div id="shutdown-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+		<div id="shutdown-backdrop" class="absolute inset-0 bg-gray-950/80"></div>
+		<div class="relative w-full max-w-sm rounded-lg bg-gray-900 border border-gray-700 shadow-xl p-6 space-y-4 text-center">
+			<svg class="mx-auto h-10 w-10 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"></path>
+			</svg>
+			<h3 class="text-lg font-semibold text-white">Shutdown Server?</h3>
+			<p class="text-sm text-gray-400">This will stop the VDJ Video Sync server. All connected clients will be disconnected.</p>
+			<div class="flex gap-3">
+				<button id="shutdown-cancel" type="button" class="flex-1 rounded-md bg-gray-700 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-600 focus:outline-none">
+					Cancel
+				</button>
+				<button id="shutdown-confirm" type="button" class="flex-1 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 focus:outline-none">
+					Shutdown
+				</button>
+			</div>
+		</div>
+	</div>
+}
