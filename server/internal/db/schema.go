@@ -2,8 +2,8 @@ package db
 
 import "database/sql"
 
-// migrate applies the database schema.
-func migrate(db *sql.DB) error {
+// ensureSchema creates the initial database tables and seeds default config.
+func ensureSchema(db *sql.DB) error {
 	const schema = `
 	CREATE TABLE IF NOT EXISTS config (
 		key   TEXT PRIMARY KEY,

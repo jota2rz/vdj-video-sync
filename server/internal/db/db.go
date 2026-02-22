@@ -7,7 +7,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// Open initialises the SQLite database and runs migrations.
+// Open initialises the SQLite database and ensures the schema exists.
 func Open(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -26,7 +26,7 @@ func Open(path string) (*sql.DB, error) {
 		}
 	}
 
-	if err := migrate(db); err != nil {
+	if err := ensureSchema(db); err != nil {
 		db.Close()
 		return nil, err
 	}

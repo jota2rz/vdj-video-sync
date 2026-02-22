@@ -3,7 +3,7 @@
 [![Build Server](https://github.com/jota2rz/vdj-video-sync/actions/workflows/build-server.yml/badge.svg)](https://github.com/jota2rz/vdj-video-sync/actions/workflows/build-server.yml)
 [![Build Plugin](https://github.com/jota2rz/vdj-video-sync/actions/workflows/build-plugin.yml/badge.svg)](https://github.com/jota2rz/vdj-video-sync/actions/workflows/build-plugin.yml)
 
-Synchronize local video playback with VirtualDJ — a C++ plugin sends real-time deck state to a Go server, which serves a browser-based video player that matches and syncs videos by song title, filename similarity, or BPM.
+Synchronize local video playback with VirtualDJ — a C++ plugin sends real-time deck state to a Go server, which serves a browser-based video player that matches and syncs videos by exact filename, exact stem, filename similarity, BPM or random.
 
 > **100% vibe coded** with [Claude Opus 4.6](https://www.anthropic.com/claude) ✨
 
@@ -74,7 +74,7 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 
 ### Standalone Player (`/player`)
 
-- Fullscreen video output (opens in new tab, no UI chrome)
+- Fullscreen video output (opens in new tab, no UI)
 - Same transition and sync logic as the embedded dashboard player
 - "Waiting for track..." fallback when no video is matched
 

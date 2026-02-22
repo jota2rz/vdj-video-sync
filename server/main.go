@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"flag"
-	"log/slog"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -132,15 +132,17 @@ func main() {
 		}
 	}()
 
-	// ── Auto-open dashboard ───────────────────────────────
+	// ── Dashboard URL ─────────────────────────────────────
 	// Resolve the listen address to an actual URL (handle ":port" form).
+	host, port, _ := net.SplitHostPort(*addr)
+	if host == "" {
+		host = "localhost"
+	}
+	dashURL := fmt.Sprintf("http://%s/dashboard", net.JoinHostPort(host, port))
+	slog.Info("dashboard available", "url", dashURL)
+
+	// Auto-open browser (skipped in debug mode and with -no-browser).
 	if !*noBrowser && !*debug {
-		host, port, _ := net.SplitHostPort(*addr)
-		if host == "" {
-			host = "localhost"
-		}
-		dashURL := fmt.Sprintf("http://%s/dashboard", net.JoinHostPort(host, port))
-		slog.Info("opening dashboard in browser", "url", dashURL)
 		browser.Open(dashURL)
 	}
 
