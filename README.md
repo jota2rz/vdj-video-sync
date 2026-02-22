@@ -241,9 +241,9 @@ GOOS=linux   GOARCH=amd64 go build -o vdj-video-sync-server .
 | Package | Purpose |
 |---------|---------|
 | [templ](https://github.com/a-h/templ) | Type-safe HTML templating |
-| [go-mp4](https://github.com/abema/go-mp4) | MP4 container parsing for BPM analysis |
-| [concentus](https://github.com/lostromb/concentus) (Go port) | Pure-Go Opus audio decoder (SILK + CELT) |
-| [go-aac](https://github.com/skrashevich/go-aac) | Pure-Go AAC audio decoder |
+| [go-mp4](https://github.com/abema/go-mp4) | MP4 container parsing — extracts audio tracks from video files |
+| [concentus](https://github.com/lostromb/concentus) (Go port) | Pure-Go Opus decoder (SILK + CELT) — decodes audio for BPM analysis |
+| [go-aac](https://github.com/skrashevich/go-aac) | Pure-Go AAC decoder — decodes audio for BPM analysis |
 | [sqlite](https://pkg.go.dev/modernc.org/sqlite) | Pure-Go SQLite driver (no CGo) |
 
 All dependencies are **pure Go** — no CGo, no ffmpeg, no native libraries required.
