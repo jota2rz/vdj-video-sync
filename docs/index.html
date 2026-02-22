@@ -222,6 +222,43 @@
             gap: 1.5rem;
             margin-bottom: 0.75rem;
         }
+
+        .preview-img {
+            width: 100%;
+            border-radius: 0.75rem;
+            border: 1px solid var(--border);
+            margin-bottom: 2rem;
+        }
+
+        .step-img {
+            display: block;
+            max-width: 220px;
+            margin: 0.75rem auto 0;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+        }
+
+        .how-it-works code {
+            background: #1f2937;
+            padding: 0.15rem 0.4rem;
+            border-radius: 0.25rem;
+            font-size: 0.85em;
+            color: var(--accent);
+        }
+
+        .network-note {
+            margin-top: 1.25rem;
+            padding: 0.75rem 1rem;
+            background: #1c2333;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .network-note strong {
+            color: var(--text);
+        }
     </style>
 </head>
 <body>
@@ -231,6 +268,8 @@
             <p class="tagline">Automatic BPM-synced video mixing for VirtualDJ</p>
             <span class="badge">100% Vibe Coded</span>
         </header>
+
+        <img src="dashboard.JPG" alt="VDJ Video Sync Dashboard" class="preview-img">
 
         <div class="download-section">
             <a href="https://github.com/jota2rz/vdj-video-sync/releases/latest" class="download-btn">
@@ -243,26 +282,41 @@
         </div>
 
         <section class="how-it-works">
-            <h2><span class="icon">⚡</span> How It Works</h2>
+            <h2><span class="icon">⚡</span> Getting Started</h2>
             <ol>
-                <li><strong>Install the VDJ plugin</strong> — it sends deck state (BPM, play/pause, active deck) to the server in real time</li>
-                <li><strong>Run the server</strong> — it scans your video folder, analyzes BPM from audio, and matches videos to songs</li>
-                <li><strong>Open the dashboard</strong> — watch BPM-synced videos play automatically in your browser, with crossfade transitions on deck switches</li>
+                <li>
+                    <strong>Install the VDJ plugin</strong> — copy the plugin file to your VirtualDJ effects folder:
+                    <br>Windows: <code>%USERPROFILE%\AppData\Local\VirtualDJ\Plugins64\SoundEffect\</code>
+                    <br>macOS: <code>~/Library/Application Support/VirtualDJ/Plugins64/SoundEffect/</code>
+                </li>
+                <li>
+                    <strong>Enable the effect in VirtualDJ</strong> — open VirtualDJ, go to the Master panel, and enable the Master Effect called <strong>VdjVideoSync</strong>.
+                    <img src="master_effect.JPG" alt="VirtualDJ Master Effect - VdjVideoSync" class="step-img">
+                </li>
+                <li>
+                    <strong>Launch the server</strong> — run the server executable. Your browser will automatically open the dashboard. From there, configure where your video files and transition videos are stored using the settings panel.
+                </li>
+                <li>
+                    <strong>Play music in VirtualDJ</strong> — the dashboard will automatically match and sync videos to whatever is playing, with BPM-synced playback and crossfade transitions on deck switches.
+                </li>
             </ol>
+            <div class="network-note">
+                <strong>💡 Tip:</strong> You can also open the dashboard from any other computer on your local network by navigating to <code>http://&lt;your-ip&gt;:8090/dashboard</code>. Mobile devices are not supported due to video decoding performance requirements.
+            </div>
         </section>
 
         <section class="features">
             <h2><span class="icon">✨</span> Features</h2>
             <ul>
                 <li>6-level smart video matching: exact, stem, fuzzy, BPM+fuzzy, BPM, random</li>
-                <li>Pure-Go BPM analysis from audio (AAC &amp; Opus) — no ffmpeg needed</li>
+                <li>BPM analysis from audio — no ffmpeg needed</li>
                 <li>Playback rate adjustment to sync video BPM to song BPM</li>
                 <li>Crossfade transitions with configurable duration</li>
                 <li>Multi-deck support (up to 4 decks)</li>
                 <li>Force any video to any deck from the library browser</li>
-                <li>Real-time SSE streaming — instant updates across all browser tabs</li>
+                <li>Real-time updates across all browser tabs</li>
                 <li>Standalone fullscreen player at <code>/player</code></li>
-                <li>Web-based — works on any device with a modern browser</li>
+                <li>Web-based — works on any desktop device with a modern browser</li>
             </ul>
         </section>
 
@@ -280,12 +334,12 @@
                     <tr>
                         <td>0</td>
                         <td>Exact</td>
-                        <td>Filename matches exactly (ignoring extension)</td>
+                        <td>Filename matches exactly</td>
                     </tr>
                     <tr>
                         <td>1</td>
                         <td>Stem</td>
-                        <td>Cleaned filename stems match</td>
+                        <td>Cleaned filename stems match (no file extension)</td>
                     </tr>
                     <tr>
                         <td>2</td>
@@ -315,15 +369,16 @@
             <h2><span class="icon">📋</span> Requirements</h2>
             <ul>
                 <li>VirtualDJ 8+ (Windows or macOS)</li>
-                <li>MP4 video files with AAC or Opus audio</li>
-                <li>A modern web browser (Chrome, Edge, Firefox, Safari)</li>
+                <li>MP4 video files with AAC or Opus audio (YouTube downloaded videos supported)</li>
+                <li>A modern desktop web browser (Chrome, Edge, Firefox, Safari)</li>
             </ul>
         </section>
 
         <footer>
             <div class="footer-links">
                 <a href="https://github.com/jota2rz/vdj-video-sync">GitHub</a>
-                <a href="https://github.com/jota2rz/vdj-video-sync/blob/main/README.md">Documentation</a>
+                <a href="https://github.com/jota2rz/vdj-video-sync/blob/main/README.md">Developer Documentation</a>
+                <a href="https://github.com/jota2rz/vdj-video-sync/discussions">Discussions</a>
                 <a href="https://github.com/jota2rz/vdj-video-sync/issues">Report Issue</a>
             </div>
             <p>GPL-3.0 · Built with Go, Templ &amp; Tailwind CSS · AI-assisted by Claude Opus 4.6</p>
