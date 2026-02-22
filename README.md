@@ -1,6 +1,7 @@
 # VDJ Video Sync
 
 [![Build Server](https://github.com/jota2rz/vdj-video-sync/actions/workflows/build-server.yml/badge.svg)](https://github.com/jota2rz/vdj-video-sync/actions/workflows/build-server.yml)
+[![Build Plugin](https://github.com/jota2rz/vdj-video-sync/actions/workflows/build-plugin.yml/badge.svg)](https://github.com/jota2rz/vdj-video-sync/actions/workflows/build-plugin.yml)
 
 Synchronize local video playback with VirtualDJ — a C++ plugin sends real-time deck state to a Go server, which serves a browser-based video player that matches and syncs videos by song title, filename similarity, or BPM.
 

@@ -1,0 +1,98 @@
+name: Build Plugin
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Plugin – ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            artifact: plugin-windows-x64
+
+          - name: macOS arm64
+            os: macos-latest
+            arch: arm64
+            artifact: plugin-macos-arm64
+
+          - name: macOS amd64
+            os: macos-latest
+            arch: x86_64
+            artifact: plugin-macos-amd64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The VDJ SDK is not distributed with the repo (no clear open-source
+      # license). CI downloads it from the official VirtualDJ developer page.
+      - name: Download VirtualDJ SDK (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          curl -sL -o vdj_sdk.zip \
+            "https://www.virtualdj.com/developers/VirtualDJ8_SDK_20211003.zip"
+          unzip -o vdj_sdk.zip -d VirtualDJ8_SDK_20211003
+          ls -la VirtualDJ8_SDK_20211003/
+
+      - name: Download VirtualDJ SDK (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://www.virtualdj.com/developers/VirtualDJ8_SDK_20211003.zip" `
+            -OutFile vdj_sdk.zip
+          Expand-Archive -Path vdj_sdk.zip -DestinationPath VirtualDJ8_SDK_20211003 -Force
+          Get-ChildItem VirtualDJ8_SDK_20211003/
+
+      # ── Windows build (MSVC) ──────────────────────────
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cmake -S plugin -B plugin/build \
+            -A x64 \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: cmake --build plugin/build --config Release
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: plugin/build/out/Release/VdjVideoSync.dll
+          retention-days: 30
+
+      # ── macOS build (Clang, per-arch) ─────────────────
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cmake -S plugin -B plugin/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: cmake --build plugin/build --config Release
+
+      - name: Upload artifact (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: plugin/build/out/VdjVideoSync.bundle
+          retention-days: 30
