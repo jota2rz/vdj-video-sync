@@ -37,14 +37,24 @@ if(WIN32)
         _CRT_SECURE_NO_WARNINGS
     )
 elseif(APPLE)
-    # VirtualDJ macOS plugins are .bundle files
+    # VirtualDJ macOS plugins are CFBundle (.bundle) files.
+    # Based on: https://github.com/szemek/virtualdj-plugins-examples
     set_target_properties(${PROJECT_NAME} PROPERTIES
+        BUNDLE TRUE
+        BUNDLE_EXTENSION "bundle"
         PREFIX ""
         OUTPUT_NAME "VdjVideoSync"
-        SUFFIX ".bundle"
         # Hide symbols by default; VDJ_EXPORT opens DllGetClassObject
         CXX_VISIBILITY_PRESET hidden
+        # Bundle metadata
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.vdjvideosync.plugin"
+        MACOSX_BUNDLE_BUNDLE_NAME "VdjVideoSync"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/src/Info.plist.in"
     )
+    # macOS minimum deployment target (consistent with VDJ SDK examples)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "" FORCE)
 else()
     message(FATAL_ERROR "VirtualDJ only runs on Windows and macOS. This plugin cannot be built on ${CMAKE_SYSTEM_NAME}.")
 endif()

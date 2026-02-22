@@ -1,0 +1,99 @@
+name: Build Server
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Server – ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            goos: windows
+            goarch: amd64
+            binary: vdj-video-sync-server.exe
+          - name: macOS Universal
+            os: macos-latest
+            goos: darwin
+            goarch: amd64,arm64
+            binary: vdj-video-sync-server
+          - name: Linux x64
+            os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            binary: vdj-video-sync-server
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Install templ CLI
+        run: go install github.com/a-h/templ/cmd/templ@latest
+
+      - name: Install Tailwind CSS (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            TAILWIND_PLATFORM="macos-arm64"
+          else
+            TAILWIND_PLATFORM="linux-x64"
+          fi
+          curl -sLO "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-${TAILWIND_PLATFORM}"
+          chmod +x "tailwindcss-${TAILWIND_PLATFORM}"
+          sudo mv "tailwindcss-${TAILWIND_PLATFORM}" /usr/local/bin/tailwindcss
+
+      - name: Install Tailwind CSS (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $url = "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-windows-x64.exe"
+          Invoke-WebRequest -Uri $url -OutFile "$env:USERPROFILE\go\bin\tailwindcss.exe"
+
+      - name: Generate templ files
+        working-directory: server
+        run: templ generate
+
+      - name: Build Tailwind CSS
+        working-directory: server
+        run: tailwindcss -i static/css/input.css -o static/css/output.css --minify
+
+      # macOS universal binary: build amd64 + arm64, then lipo merge
+      - name: Build (macOS Universal)
+        if: matrix.goos == 'darwin'
+        working-directory: server
+        run: |
+          GOOS=darwin GOARCH=amd64 go build -o vdj-video-sync-server-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -o vdj-video-sync-server-arm64 .
+          lipo -create -output vdj-video-sync-server vdj-video-sync-server-amd64 vdj-video-sync-server-arm64
+          rm vdj-video-sync-server-amd64 vdj-video-sync-server-arm64
+          file vdj-video-sync-server
+
+      - name: Build (Windows / Linux)
+        if: matrix.goos != 'darwin'
+        working-directory: server
+        shell: bash
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ${{ matrix.binary }} .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: server/${{ matrix.binary }}
+          retention-days: 30

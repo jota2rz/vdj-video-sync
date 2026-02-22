@@ -19,11 +19,7 @@ import (
 
 // Supported video file extensions.
 var videoExts = map[string]bool{
-	".mp4":  true,
-	".webm": true,
-	".mkv":  true,
-	".avi":  true,
-	".mov":  true,
+	".mp4": true,
 }
 
 // Match level constants (0 = best, 5 = worst).
@@ -704,7 +700,7 @@ func levenshtein(a, b string) int {
 // ── BPM from filename ───────────────────────────────────
 
 // parseBPMFromName tries to extract a BPM value from a filename.
-// Expected format: "Something - 128bpm.mp4" or "track_128bpm.webm"
+// Expected format: "Something - 128bpm.mp4" or "track_128bpm.mp4"
 func parseBPMFromName(name string) float64 {
 	lower := strings.ToLower(name)
 	idx := strings.Index(lower, "bpm")

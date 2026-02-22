@@ -1,5 +1,7 @@
 # VDJ Video Sync
 
+[![Build Server](https://github.com/jota2rz/vdj-video-sync/actions/workflows/build-server.yml/badge.svg)](https://github.com/jota2rz/vdj-video-sync/actions/workflows/build-server.yml)
+
 Synchronize local video playback with VirtualDJ — a C++ plugin sends real-time deck state to a Go server, which serves a browser-based video player that matches and syncs videos by song title, filename similarity, or BPM.
 
 > **100% vibe coded** with [Claude Opus 4.6](https://www.anthropic.com/claude) ✨
@@ -19,6 +21,8 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 
 ## Features
 
+> **Note:** Mobile devices are not supported. The server UI requires simultaneous decoding of multiple video streams, triple-buffered transitions, canvas mirroring, and real-time playback rate adjustments — all of which exceed mobile browser video decoding performance. A desktop or laptop browser is required.
+
 ### Video Matching (6-level tiered fallback)
 
 | Level | Type | Description |
@@ -31,8 +35,8 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 | 5 | **Random** | Any random video (stable pick by song hash) |
 
 - Half-time BPM correction: automatically detects and corrects half-time BPM readings
-- BPM from filename parsing (e.g. `loop_128bpm.mp4`)
 - BPM from audio analysis (AAC & Opus codecs, pure Go — no ffmpeg)
+- Filename BPM fallback: parses BPM from filename (e.g. `loop_128bpm.mp4`) when audio analysis is unavailable
 
 ### Playback Synchronization
 
@@ -75,7 +79,7 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 
 ### Control Bar
 
-- Transition enabled/disabled toggle (iOS-style switch)
+- Transition enabled/disabled toggle
 - Transition duration ± buttons (1-10 seconds)
 - Config changes sync across all tabs via BroadcastChannel + SSE
 
@@ -144,7 +148,7 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 
 ### Plugin (C++)
 - CMake 3.20+
-- MSVC (Visual Studio 2022) or compatible C++17 compiler
+- C++17 compiler: MSVC (Visual Studio 2022) on Windows, Clang/Xcode on macOS
 - [cpp-httplib](https://github.com/yhirose/cpp-httplib) — single header, already vendored in `plugin/vendor/httplib.h`
 - [VirtualDJ SDK](https://virtualdj.com/wiki/Developers) — download the SDK headers and place them in `VirtualDJ8_SDK_20211003/`
 
@@ -159,15 +163,29 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 
 ### Plugin
 
-```powershell
+**Windows:**
+```bash
 cd plugin
 cmake -B build -A x64
 cmake --build build --config Release
 # Output: build/Release/VdjVideoSync.dll
-# Copy to: %USERPROFILE%/Documents/VirtualDJ/Plugins64/AutoStart/
+# Copy to: %USERPROFILE%/AppData/Local/VirtualDJ/Plugins64/SoundEffect/
 ```
 
+**macOS:**
+```bash
+cd plugin
+cmake -B build
+cmake --build build --config Release
+# Output: build/Release/VdjVideoSync.bundle
+# Copy to: ~/Library/Application Support/VirtualDJ/Plugins64/SoundEffect/
+```
+
+Based on [szemek/virtualdj-plugins-examples](https://github.com/szemek/virtualdj-plugins-examples) for XCode compatibility.
+
 ### Server
+
+The Go server compiles natively on **Windows**, **macOS**, and **Linux** — all dependencies are pure Go (no CGo).
 
 ```bash
 cd server
@@ -191,18 +209,29 @@ Or manually:
 cd server
 templ generate
 tailwindcss -i static/css/input.css -o static/css/output.css --minify
-go build -o vdj-video-sync-server .
+go build -o vdj-video-sync-server .    # Linux / macOS
+go build -o vdj-video-sync-server.exe .  # Windows
 ./vdj-video-sync-server -addr :8090 -videos ./videos
 ```
 
+You can also cross-compile from any OS:
+
+```bash
+GOOS=windows GOARCH=amd64 go build -o vdj-video-sync-server.exe .
+GOOS=darwin  GOARCH=arm64 go build -o vdj-video-sync-server .
+GOOS=linux   GOARCH=amd64 go build -o vdj-video-sync-server .
+```
+
 ### Usage
+####Go server and Virtual DJ must run in the same computer
 
 1. Start the Go server
-2. Load VirtualDJ with the plugin DLL in `Plugins64/AutoStart/`
-3. Open `http://localhost:8090/dashboard` for the control interface
-4. Open `http://localhost:8090/player` in a separate window/tab/screen for fullscreen video output
-5. Place video files in the configured videos directory (`.mp4`, `.webm`, `.mkv`, `.avi`, `.mov`)
-6. Place transition videos in the transition videos directory
+2. Put `VdjVideoSync.dll` at `Plugins64/SoundEffect/`
+3. Launch Virtual DJ and enable the Master Effect called `VdjVideoSync`
+4. Open `http://localhost:8090/dashboard` for the control interface
+5. Open `http://localhost:8090/player` in a separate window/tab/screen for fullscreen video output
+6. Place video files in the configured videos directory (`.mp4` with AAC or Opus SILK or CELT audio, this means it's YouTube compatible)
+7. Place transition videos in the transition videos directory
 
 ## Dependencies
 
