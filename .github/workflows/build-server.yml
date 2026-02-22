@@ -23,7 +23,7 @@ jobs:
             goarch: amd64
             binary: vdj-video-sync-server.exe
           - name: macOS Universal
-            os: macos-latest
+            os: macos-13
             goos: darwin
             goarch: amd64,arm64
             binary: vdj-video-sync-server
@@ -50,7 +50,7 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           if [ "${{ runner.os }}" = "macOS" ]; then
-            TAILWIND_PLATFORM="macos-arm64"
+            TAILWIND_PLATFORM="macos-x64"
           else
             TAILWIND_PLATFORM="linux-x64"
           fi
