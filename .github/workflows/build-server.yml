@@ -73,13 +73,23 @@ jobs:
         working-directory: server
         run: tailwindcss -i static/css/input.css -o static/css/output.css --minify
 
-      # macOS universal binary: build amd64 + arm64, then lipo merge
-      - name: Build (macOS Universal)
+      # macOS universal binary: build amd64 + arm64 separately, then lipo merge.
+      # Split into separate steps and use -p 1 to reduce peak memory usage
+      # (the concentus/SILK package is very large and can OOM the runner).
+      - name: Build amd64 (macOS)
+        if: matrix.goos == 'darwin'
+        working-directory: server
+        run: GOOS=darwin GOARCH=amd64 go build -p 1 -o vdj-video-sync-server-amd64 .
+
+      - name: Build arm64 (macOS)
+        if: matrix.goos == 'darwin'
+        working-directory: server
+        run: GOOS=darwin GOARCH=arm64 go build -p 1 -o vdj-video-sync-server-arm64 .
+
+      - name: Create universal binary (macOS)
         if: matrix.goos == 'darwin'
         working-directory: server
         run: |
-          GOOS=darwin GOARCH=amd64 go build -o vdj-video-sync-server-amd64 .
-          GOOS=darwin GOARCH=arm64 go build -o vdj-video-sync-server-arm64 .
           lipo -create -output vdj-video-sync-server vdj-video-sync-server-amd64 vdj-video-sync-server-arm64
           rm vdj-video-sync-server-amd64 vdj-video-sync-server-arm64
           file vdj-video-sync-server
