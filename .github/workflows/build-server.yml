@@ -77,16 +77,16 @@ jobs:
       # macOS binaries are cross-compiled from Linux to avoid macOS runner
       # OOM issues with the large concentus/SILK package.
       # -p 1 limits parallel compilation to reduce peak memory usage.
-      # Pre-warm the SILK package cache first so the full build doesn't
-      # have to compile it alongside everything else.
-      - name: Pre-warm SILK package cache
-        working-directory: server
-        shell: bash
-        env:
-          CGO_ENABLED: "0"
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: go build -p 1 github.com/lostromb/concentus/go/silk
+      # The SILK codec package needs ~4GB+ RAM to compile, so we add swap
+      # on Linux runners to prevent OOM kills (exit 143).
+      - name: Add swap space (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo fallocate -l 4G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "Swap enabled: $(swapon --show)"
 
       - name: Build
         working-directory: server
