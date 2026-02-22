@@ -252,7 +252,7 @@ All dependencies are **pure Go** — no CGo, no ffmpeg, no native libraries requ
 
 | Library | Purpose |
 |---------|---------|
-| [cpp-httplib](https://github.com/yhirose/cpp-httplib) | Single-header HTTP client for sending deck state |
+| [cpp-httplib](https://github.com/yhirose/cpp-httplib) | Single-header HTTP client for sending deck state (not distributed — download separately) |
 | [VirtualDJ SDK](https://virtualdj.com/wiki/Developers) | Plugin interface headers (not distributed — download separately) |
 
 ### Frontend
