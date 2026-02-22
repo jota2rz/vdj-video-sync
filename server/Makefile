@@ -21,6 +21,10 @@ else
   FIND_DEL = find . -name '*_templ.go' -delete
 endif
 
+# -p 1 and -gcflags disable parallel compilation and optimizations for the
+# concentus/SILK codec, which consumes excessive memory during SSA passes.
+GCFLAGS := -gcflags="github.com/lostromb/concentus/...=-N -l"
+
 # ── All ──────────────────────────────────────────────────
 all: generate css build
 
@@ -34,7 +38,7 @@ css:
 
 # ── Build Go binary ─────────────────────────────────────
 build: generate css
-	go build -o $(BINARY)$(EXE) .
+	go build -p 1 $(GCFLAGS) -o $(BINARY)$(EXE) .
 
 # ── Run server ───────────────────────────────────────────
 run: build

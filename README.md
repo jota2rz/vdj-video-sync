@@ -210,18 +210,19 @@ Or manually:
 cd server
 templ generate
 tailwindcss -i static/css/input.css -o static/css/output.css --minify
-go build -o vdj-video-sync-server .    # Linux / macOS
-go build -o vdj-video-sync-server.exe .  # Windows
+# -p 1 and -gcflags prevent OOM from concentus/SILK codec compilation
+go build -p 1 -gcflags="github.com/lostromb/concentus/...=-N -l" -o vdj-video-sync-server .    # Linux / macOS
+go build -p 1 -gcflags="github.com/lostromb/concentus/...=-N -l" -o vdj-video-sync-server.exe .  # Windows
 ./vdj-video-sync-server -addr :8090 -videos ./videos
 ```
 
 You can also cross-compile from any OS:
 
 ```bash
-# -gcflags disables optimizations for concentus/SILK to prevent OOM during compilation
-GOOS=windows GOARCH=amd64 go build -gcflags="github.com/lostromb/concentus/...=-N -l" -o vdj-video-sync-server.exe .
-GOOS=darwin  GOARCH=arm64 go build -gcflags="github.com/lostromb/concentus/...=-N -l" -o vdj-video-sync-server .
-GOOS=linux   GOARCH=amd64 go build -gcflags="github.com/lostromb/concentus/...=-N -l" -o vdj-video-sync-server .
+# -p 1 and -gcflags prevent OOM from concentus/SILK codec compilation
+GOOS=windows GOARCH=amd64 go build -p 1 -gcflags="github.com/lostromb/concentus/...=-N -l" -o vdj-video-sync-server.exe .
+GOOS=darwin  GOARCH=arm64 go build -p 1 -gcflags="github.com/lostromb/concentus/...=-N -l" -o vdj-video-sync-server .
+GOOS=linux   GOARCH=amd64 go build -p 1 -gcflags="github.com/lostromb/concentus/...=-N -l" -o vdj-video-sync-server .
 ```
 
 ### Usage
