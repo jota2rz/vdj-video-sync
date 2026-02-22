@@ -22,10 +22,15 @@ jobs:
             goos: windows
             goarch: amd64
             binary: vdj-video-sync-server.exe
-          - name: macOS Universal
-            os: macos-13
+          - name: macOS arm64
+            os: ubuntu-latest
             goos: darwin
-            goarch: amd64,arm64
+            goarch: arm64
+            binary: vdj-video-sync-server
+          - name: macOS amd64
+            os: ubuntu-latest
+            goos: darwin
+            goarch: amd64
             binary: vdj-video-sync-server
           - name: Linux x64
             os: ubuntu-latest
@@ -46,17 +51,12 @@ jobs:
       - name: Install templ CLI
         run: go install github.com/a-h/templ/cmd/templ@latest
 
-      - name: Install Tailwind CSS (Linux/macOS)
+      - name: Install Tailwind CSS (Linux)
         if: runner.os != 'Windows'
         run: |
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            TAILWIND_PLATFORM="macos-x64"
-          else
-            TAILWIND_PLATFORM="linux-x64"
-          fi
-          curl -sLO "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-${TAILWIND_PLATFORM}"
-          chmod +x "tailwindcss-${TAILWIND_PLATFORM}"
-          sudo mv "tailwindcss-${TAILWIND_PLATFORM}" /usr/local/bin/tailwindcss
+          curl -sLO "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64"
+          chmod +x tailwindcss-linux-x64
+          sudo mv tailwindcss-linux-x64 /usr/local/bin/tailwindcss
 
       - name: Install Tailwind CSS (Windows)
         if: runner.os == 'Windows'
@@ -73,41 +73,14 @@ jobs:
         working-directory: server
         run: tailwindcss -i static/css/input.css -o static/css/output.css --minify
 
-      # macOS universal binary: build amd64 + arm64 separately, then lipo merge.
-      # Split into separate steps and use -p 1 to reduce peak memory usage
-      # (the concentus/SILK package is very large and can OOM the runner).
-      # CGO_ENABLED=0 ensures no CGO overhead. Pre-warm the SILK package
-      # cache before the full build to reduce peak memory.
-      - name: Build amd64 (macOS)
-        if: matrix.goos == 'darwin'
-        working-directory: server
-        env:
-          CGO_ENABLED: "0"
-        run: |
-          GOOS=darwin GOARCH=amd64 go build -p 1 github.com/lostromb/concentus/go/silk
-          GOOS=darwin GOARCH=amd64 go build -p 1 -o vdj-video-sync-server-amd64 .
-
-      - name: Build arm64 (macOS)
-        if: matrix.goos == 'darwin'
-        working-directory: server
-        env:
-          CGO_ENABLED: "0"
-        run: |
-          GOOS=darwin GOARCH=arm64 go build -p 1 github.com/lostromb/concentus/go/silk
-          GOOS=darwin GOARCH=arm64 go build -p 1 -o vdj-video-sync-server-arm64 .
-
-      - name: Create universal binary (macOS)
-        if: matrix.goos == 'darwin'
-        working-directory: server
-        run: |
-          lipo -create -output vdj-video-sync-server vdj-video-sync-server-amd64 vdj-video-sync-server-arm64
-          rm vdj-video-sync-server-amd64 vdj-video-sync-server-arm64
-          file vdj-video-sync-server
-
-      - name: Build (Windows / Linux)
-        if: matrix.goos != 'darwin'
+      # All targets use pure Go cross-compilation (no CGO).
+      # macOS binaries are cross-compiled from Linux to avoid macOS runner
+      # OOM issues with the large concentus/SILK package.
+      - name: Build
         working-directory: server
         shell: bash
+        env:
+          CGO_ENABLED: "0"
         run: |
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ${{ matrix.binary }} .
 
