@@ -116,7 +116,7 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 │   │   ├── VideoSyncPlugin.cpp
 │   │   └── VdjVideoSync.def    # DLL exports
 │   └── vendor/
-│       └── httplib.h           # cpp-httplib (vendored)
+│       └── httplib.h           # cpp-httplib (download separately)
 │
 ├── server/                     # Go server
 │   ├── main.go                 # HTTP server, routing, CLI flags
@@ -150,10 +150,10 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 ### Plugin (C++)
 - CMake 3.20+
 - C++17 compiler: MSVC (Visual Studio 2022) on Windows, Clang/Xcode on macOS
-- [cpp-httplib](https://github.com/yhirose/cpp-httplib) — single header, already vendored in `plugin/vendor/httplib.h`
+- [cpp-httplib](https://github.com/yhirose/cpp-httplib) — download [httplib.h](https://github.com/yhirose/cpp-httplib/releases/download/v0.32.0/httplib.h) and place it in `plugin/vendor/httplib.h`
 - [VirtualDJ SDK](https://virtualdj.com/wiki/Developers) — download the SDK headers and place them in `VirtualDJ8_SDK_20211003/`
 
-> **Note:** The VirtualDJ SDK is **not distributed** with this project because it has no clear open-source license. You can download it directly from https://virtualdj.com/wiki/Developers.
+> **Note:** cpp-httplib and the VirtualDJ SDK are **not distributed** with this project. cpp-httplib is MIT-licensed but too large to vendor in git; the VDJ SDK has no clear open-source license. Download both before building.
 
 ### Server (Go)
 - Go 1.24+
