@@ -3,11 +3,12 @@ name: Build Server
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -23,18 +24,21 @@ jobs:
             goarch: amd64
             artifact: server-windows-x64
             binary: vdj-video-sync-server.exe
+            release_asset: vdj-video-sync-server-windows-x64.exe
           - name: macOS Universal
             os: macos-latest
             goos: darwin
             goarch: ""
             artifact: server-macos-universal
             binary: vdj-video-sync-server
+            release_asset: vdj-video-sync-server-macos-universal
           - name: Linux x64
             os: ubuntu-latest
             goos: linux
             goarch: amd64
             artifact: server-linux-x64
             binary: vdj-video-sync-server
+            release_asset: vdj-video-sync-server-linux-x64
 
     steps:
       - name: Checkout
@@ -117,3 +121,15 @@ jobs:
           name: ${{ matrix.artifact }}
           path: server/${{ matrix.binary }}
           retention-days: 30
+
+      - name: Upload release asset
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: server
+        shell: bash
+        run: cp ${{ matrix.binary }} ${{ matrix.release_asset }}
+
+      - name: Attach release asset
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: server/${{ matrix.release_asset }}
