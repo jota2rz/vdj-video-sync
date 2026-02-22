@@ -15,7 +15,9 @@ if(WIN32)
     list(APPEND SOURCES src/VdjVideoSync.def)
 endif()
 
-add_library(${PROJECT_NAME} SHARED ${SOURCES})
+# MODULE (not SHARED) so macOS produces a loadable .bundle via BUNDLE TRUE,
+# and Windows still produces a .dll loaded by VDJ via LoadLibrary.
+add_library(${PROJECT_NAME} MODULE ${SOURCES})
 
 # ── Include paths ────────────────────────────────────────
 target_include_directories(${PROJECT_NAME} PRIVATE
