@@ -82,11 +82,11 @@ jobs:
       - name: Add swap space (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo fallocate -l 4G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          echo "Swap enabled: $(swapon --show)"
+          sudo fallocate -l 4G /swapfile2
+          sudo chmod 600 /swapfile2
+          sudo mkswap /swapfile2
+          sudo swapon /swapfile2
+          echo "Swap enabled:" && swapon --show
 
       - name: Build
         working-directory: server
