@@ -76,13 +76,26 @@ jobs:
       # All targets use pure Go cross-compilation (no CGO).
       # macOS binaries are cross-compiled from Linux to avoid macOS runner
       # OOM issues with the large concentus/SILK package.
+      # -p 1 limits parallel compilation to reduce peak memory usage.
+      # Pre-warm the SILK package cache first so the full build doesn't
+      # have to compile it alongside everything else.
+      - name: Pre-warm SILK package cache
+        working-directory: server
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -p 1 github.com/lostromb/concentus/go/silk
+
       - name: Build
         working-directory: server
         shell: bash
         env:
           CGO_ENABLED: "0"
-        run: |
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o ${{ matrix.binary }} .
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -p 1 -o ${{ matrix.binary }} .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
