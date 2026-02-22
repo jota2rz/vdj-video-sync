@@ -76,15 +76,25 @@ jobs:
       # macOS universal binary: build amd64 + arm64 separately, then lipo merge.
       # Split into separate steps and use -p 1 to reduce peak memory usage
       # (the concentus/SILK package is very large and can OOM the runner).
+      # CGO_ENABLED=0 ensures no CGO overhead. Pre-warm the SILK package
+      # cache before the full build to reduce peak memory.
       - name: Build amd64 (macOS)
         if: matrix.goos == 'darwin'
         working-directory: server
-        run: GOOS=darwin GOARCH=amd64 go build -p 1 -o vdj-video-sync-server-amd64 .
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          GOOS=darwin GOARCH=amd64 go build -p 1 github.com/lostromb/concentus/go/silk
+          GOOS=darwin GOARCH=amd64 go build -p 1 -o vdj-video-sync-server-amd64 .
 
       - name: Build arm64 (macOS)
         if: matrix.goos == 'darwin'
         working-directory: server
-        run: GOOS=darwin GOARCH=arm64 go build -p 1 -o vdj-video-sync-server-arm64 .
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          GOOS=darwin GOARCH=arm64 go build -p 1 github.com/lostromb/concentus/go/silk
+          GOOS=darwin GOARCH=arm64 go build -p 1 -o vdj-video-sync-server-arm64 .
 
       - name: Create universal binary (macOS)
         if: matrix.goos == 'darwin'
