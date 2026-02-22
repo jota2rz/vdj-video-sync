@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VDJ Video Sync</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --green: #3fb950;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        header {
+            text-align: center;
+            padding: 3rem 0 2rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        h1 .emoji {
+            font-size: 2rem;
+        }
+
+        .tagline {
+            color: var(--text-muted);
+            font-size: 1.15rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #1f2937;
+            color: var(--green);
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.2rem 0.6rem;
+            border-radius: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .download-section {
+            text-align: center;
+            padding: 2rem 0;
+        }
+
+        .download-btn {
+            display: inline-block;
+            background: var(--accent);
+            color: #000;
+            font-size: 1.1rem;
+            font-weight: 600;
+            padding: 0.85rem 2.5rem;
+            border-radius: 0.5rem;
+            text-decoration: none;
+            transition: background 0.2s;
+            margin-bottom: 0.75rem;
+        }
+
+        .download-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .download-hint {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .download-hint a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .download-hint a:hover {
+            text-decoration: underline;
+        }
+
+        section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 1.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        h2 .icon {
+            font-size: 1.1rem;
+        }
+
+        .how-it-works ol {
+            padding-left: 1.25rem;
+        }
+
+        .how-it-works li {
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+        }
+
+        .how-it-works li strong {
+            color: var(--text);
+        }
+
+        .features ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .features li {
+            padding: 0.4rem 0;
+            color: var(--text-muted);
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+
+        .features li::before {
+            content: "✓";
+            color: var(--green);
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .match-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        .match-table th {
+            text-align: left;
+            color: var(--text-muted);
+            font-weight: 600;
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .match-table td {
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-muted);
+        }
+
+        .match-table td:first-child {
+            color: var(--text);
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .requirements ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .requirements li {
+            padding: 0.3rem 0;
+            color: var(--text-muted);
+        }
+
+        .requirements li::before {
+            content: "•";
+            color: var(--accent);
+            margin-right: 0.5rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><span class="emoji">🎬</span> VDJ Video Sync</h1>
+            <p class="tagline">Automatic BPM-synced video mixing for VirtualDJ</p>
+            <span class="badge">100% Vibe Coded</span>
+        </header>
+
+        <div class="download-section">
+            <a href="https://github.com/jota2rz/vdj-video-sync/releases/latest" class="download-btn">
+                ⬇ Download Latest Release
+            </a>
+            <p class="download-hint">
+                Windows · macOS · Linux &nbsp;|&nbsp;
+                <a href="https://github.com/jota2rz/vdj-video-sync/releases">All releases</a>
+            </p>
+        </div>
+
+        <section class="how-it-works">
+            <h2><span class="icon">⚡</span> How It Works</h2>
+            <ol>
+                <li><strong>Install the VDJ plugin</strong> — it sends deck state (BPM, play/pause, active deck) to the server in real time</li>
+                <li><strong>Run the server</strong> — it scans your video folder, analyzes BPM from audio, and matches videos to songs</li>
+                <li><strong>Open the dashboard</strong> — watch BPM-synced videos play automatically in your browser, with crossfade transitions on deck switches</li>
+            </ol>
+        </section>
+
+        <section class="features">
+            <h2><span class="icon">✨</span> Features</h2>
+            <ul>
+                <li>6-level smart video matching: exact, stem, fuzzy, BPM+fuzzy, BPM, random</li>
+                <li>Pure-Go BPM analysis from audio (AAC &amp; Opus) — no ffmpeg needed</li>
+                <li>Playback rate adjustment to sync video BPM to song BPM</li>
+                <li>Crossfade transitions with configurable duration</li>
+                <li>Multi-deck support (up to 4 decks)</li>
+                <li>Force any video to any deck from the library browser</li>
+                <li>Real-time SSE streaming — instant updates across all browser tabs</li>
+                <li>Standalone fullscreen player at <code>/player</code></li>
+                <li>Web-based — works on any device with a modern browser</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2><span class="icon">🎯</span> Video Matching</h2>
+            <table class="match-table">
+                <thead>
+                    <tr>
+                        <th>Level</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>0</td>
+                        <td>Exact</td>
+                        <td>Filename matches exactly (ignoring extension)</td>
+                    </tr>
+                    <tr>
+                        <td>1</td>
+                        <td>Stem</td>
+                        <td>Cleaned filename stems match</td>
+                    </tr>
+                    <tr>
+                        <td>2</td>
+                        <td>Fuzzy</td>
+                        <td>≥60% name similarity</td>
+                    </tr>
+                    <tr>
+                        <td>3</td>
+                        <td>BPM + Fuzzy</td>
+                        <td>Closest BPM among videos with ≥30% name similarity</td>
+                    </tr>
+                    <tr>
+                        <td>4</td>
+                        <td>BPM</td>
+                        <td>Closest BPM match from all videos</td>
+                    </tr>
+                    <tr>
+                        <td>5</td>
+                        <td>Random</td>
+                        <td>Random selection when no other match found</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="requirements">
+            <h2><span class="icon">📋</span> Requirements</h2>
+            <ul>
+                <li>VirtualDJ 8+ (Windows or macOS)</li>
+                <li>MP4 video files with AAC or Opus audio</li>
+                <li>A modern web browser (Chrome, Edge, Firefox, Safari)</li>
+            </ul>
+        </section>
+
+        <footer>
+            <div class="footer-links">
+                <a href="https://github.com/jota2rz/vdj-video-sync">GitHub</a>
+                <a href="https://github.com/jota2rz/vdj-video-sync/blob/main/README.md">Documentation</a>
+                <a href="https://github.com/jota2rz/vdj-video-sync/issues">Report Issue</a>
+            </div>
+            <p>GPL-3.0 · Built with Go, Templ &amp; Tailwind CSS · AI-assisted by Claude Opus 4.6</p>
+        </footer>
+    </div>
+</body>
+</html>
