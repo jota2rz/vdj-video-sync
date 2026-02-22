@@ -55,18 +55,11 @@ jobs:
           Get-ChildItem VirtualDJ8_SDK_20211003/
 
       # cpp-httplib is a large single-header library, gitignored like the SDK.
-      - name: Download cpp-httplib (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Download cpp-httplib
+        shell: bash
         run: |
           curl -sL -o plugin/vendor/httplib.h \
-            "https://github.com/yhirose/cpp-httplib/releases/download/v0.32.0/httplib.h"
-
-      - name: Download cpp-httplib (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Invoke-WebRequest -Uri "https://github.com/yhirose/cpp-httplib/releases/download/v0.32.0/httplib.h" `
-            -OutFile plugin/vendor/httplib.h
+            "https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.32.0/httplib.h"
 
       # ── Windows build (MSVC) ──────────────────────────
       - name: Configure (Windows)
