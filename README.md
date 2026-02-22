@@ -226,15 +226,28 @@ GOOS=linux   GOARCH=amd64 go build -p 1 -gcflags="github.com/lostromb/concentus/
 ```
 
 ### Usage
-Server and Virtual DJ must run in the same computer
+Server and Virtual DJ must run on the same computer.
 
-1. Start the Server
+1. Start the server — the dashboard opens automatically in your default browser
 2. Put `VdjVideoSync.dll` at `Plugins64/SoundEffect/`
 3. Launch Virtual DJ and enable the Master Effect called `VdjVideoSync`
-4. Open `http://localhost:8090/dashboard` for the control interface
-5. Open `http://localhost:8090/player` in a separate window/tab/screen for fullscreen video output
-6. Place video files in the configured videos directory (`.mp4` with AAC or Opus SILK or CELT audio, this means it's YouTube compatible)
-7. Place transition videos in the transition videos directory
+4. Open `http://localhost:8090/player` in a separate window/tab/screen for fullscreen video output
+5. Place video files in the configured videos directory (`.mp4` with AAC or Opus SILK or CELT audio, this means it's YouTube compatible)
+6. Place transition videos in the transition videos directory
+
+#### Server flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-addr` | `:8090` | HTTP listen address |
+| `-db` | `vdj-video-sync.db` | SQLite database path |
+| `-videos` | `./videos` | Directory containing video files |
+| `-debug` | `false` | Enable debug logging (also disables auto-open browser) |
+| `-no-browser` | `false` | Do not open the dashboard in a browser on startup |
+
+> **Headless / server environments:** On Linux, the browser is not opened when
+> neither `$DISPLAY` nor `$WAYLAND_DISPLAY` is set. On any platform you can pass
+> `-no-browser` to skip the attempt entirely.
 
 ## Dependencies
 

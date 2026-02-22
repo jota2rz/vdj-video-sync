@@ -4,6 +4,8 @@ import (
 	"context"
 	"flag"
 	"log/slog"
+	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jota2rz/vdj-video-sync/server/internal/bpm"
+	"github.com/jota2rz/vdj-video-sync/server/internal/browser"
 	"github.com/jota2rz/vdj-video-sync/server/internal/config"
 	"github.com/jota2rz/vdj-video-sync/server/internal/db"
 	"github.com/jota2rz/vdj-video-sync/server/internal/handlers"
@@ -24,6 +27,7 @@ func main() {
 	dbPath := flag.String("db", "vdj-video-sync.db", "SQLite database path")
 	videosDir := flag.String("videos", "./videos", "Directory containing video files")
 	debug := flag.Bool("debug", false, "Enable debug logging")
+	noBrowser := flag.Bool("no-browser", false, "Do not open the dashboard in a browser on startup")
 	flag.Parse()
 
 	// ── Logger ──────────────────────────────────────────
@@ -127,6 +131,18 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+
+	// ── Auto-open dashboard ───────────────────────────────
+	// Resolve the listen address to an actual URL (handle ":port" form).
+	if !*noBrowser && !*debug {
+		host, port, _ := net.SplitHostPort(*addr)
+		if host == "" {
+			host = "localhost"
+		}
+		dashURL := fmt.Sprintf("http://%s/dashboard", net.JoinHostPort(host, port))
+		slog.Info("opening dashboard in browser", "url", dashURL)
+		browser.Open(dashURL)
+	}
 
 	// ── Background BPM analysis + directory watchers ───
 	// Server is already accepting connections; dashboard shows an overlay.
