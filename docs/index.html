@@ -259,6 +259,107 @@
         .network-note strong {
             color: var(--text);
         }
+
+        .download-section {
+            text-align: center;
+            padding: 2rem 0;
+        }
+
+        .version-badge {
+            display: inline-block;
+            background: #1f6feb;
+            color: #fff;
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .download-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .download-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            text-align: center;
+        }
+
+        .download-card h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+        }
+
+        .download-card .platform-links {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .download-card .platform-links a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            padding: 0.45rem 1rem;
+            border-radius: 0.4rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .dl-primary {
+            background: var(--accent);
+            color: #000;
+        }
+
+        .dl-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .dl-secondary {
+            background: #21262d;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .dl-secondary:hover {
+            background: #30363d;
+        }
+
+        .download-hint {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-align: center;
+            margin-top: 0.5rem;
+        }
+
+        .download-hint a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .download-hint a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 600px) {
+            .download-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -272,14 +373,44 @@
         <img src="dashboard.JPG" alt="VDJ Video Sync Dashboard" class="preview-img">
 
         <div class="download-section">
-            <a href="https://github.com/jota2rz/vdj-video-sync/releases/latest" class="download-btn">
-                ⬇ Download Latest Release
-            </a>
+            <span id="version-badge" class="version-badge">Loading version...</span>
+
+            <div class="download-grid">
+                <div class="download-card">
+                    <h3>🔌 VirtualDJ Plugin</h3>
+                    <div class="platform-links">
+                        <a href="https://github.com/jota2rz/vdj-video-sync/releases/latest/download/VdjVideoSync-windows-x64.dll" class="dl-primary">⬇ Windows x64 (.dll)</a>
+                        <a href="https://github.com/jota2rz/vdj-video-sync/releases/latest/download/VdjVideoSync-macos-arm64.bundle.zip" class="dl-secondary">⬇ macOS Apple Silicon (.zip)</a>
+                        <a href="https://github.com/jota2rz/vdj-video-sync/releases/latest/download/VdjVideoSync-macos-amd64.bundle.zip" class="dl-secondary">⬇ macOS Intel (.zip)</a>
+                    </div>
+                </div>
+                <div class="download-card">
+                    <h3>🖥️ Server</h3>
+                    <div class="platform-links">
+                        <a href="https://github.com/jota2rz/vdj-video-sync/releases/latest/download/vdj-video-sync-server-windows-x64.exe" class="dl-primary">⬇ Windows x64 (.exe)</a>
+                        <a href="https://github.com/jota2rz/vdj-video-sync/releases/latest/download/vdj-video-sync-server-macos-universal" class="dl-secondary">⬇ macOS Universal</a>
+                        <a href="https://github.com/jota2rz/vdj-video-sync/releases/latest/download/vdj-video-sync-server-linux-x64" class="dl-secondary">⬇ Linux x64</a>
+                    </div>
+                </div>
+            </div>
+
             <p class="download-hint">
-                Windows · macOS · Linux &nbsp;|&nbsp;
-                <a href="https://github.com/jota2rz/vdj-video-sync/releases">All releases</a>
+                <a href="https://github.com/jota2rz/vdj-video-sync/releases">View all releases</a>
             </p>
         </div>
+
+        <script>
+            fetch('https://api.github.com/repos/jota2rz/vdj-video-sync/releases/latest')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.tag_name) {
+                        document.getElementById('version-badge').textContent = 'Latest: ' + d.tag_name;
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('version-badge').textContent = 'Latest release';
+                });
+        </script>
 
         <section class="how-it-works">
             <h2><span class="icon">⚡</span> Getting Started</h2>
@@ -287,7 +418,7 @@
                 <li>
                     <strong>Install the VDJ plugin</strong> — copy the plugin file to your VirtualDJ effects folder:
                     <br>Windows: <code>%USERPROFILE%\AppData\Local\VirtualDJ\Plugins64\SoundEffect\</code>
-                    <br>macOS: <code>~/Library/Application Support/VirtualDJ/Plugins64/SoundEffect/</code>
+                    <br>macOS: copy the <code>VdjVideoSync.bundle</code> folder to <code>~/Library/Application Support/VirtualDJ/Plugins64/SoundEffect/</code>
                 </li>
                 <li>
                     <strong>Enable the effect in VirtualDJ</strong> — open VirtualDJ, go to the Master panel, and enable the Master Effect called <strong>VdjVideoSync</strong>.
@@ -308,8 +439,8 @@
         <section class="features">
             <h2><span class="icon">✨</span> Features</h2>
             <ul>
-                <li>6-level smart video matching: exact, stem, fuzzy, BPM+fuzzy, BPM, random</li>
-                <li>BPM analysis from audio — no ffmpeg needed</li>
+                <li>6-level smart video matching: exact filename, stem, fuzzy, BPM+fuzzy, BPM, random</li>
+                <li>BPM analysis from audio</li>
                 <li>Playback rate adjustment to sync video BPM to song BPM</li>
                 <li>Crossfade transitions with configurable duration</li>
                 <li>Multi-deck support (up to 4 decks)</li>
@@ -378,7 +509,6 @@
             <div class="footer-links">
                 <a href="https://github.com/jota2rz/vdj-video-sync">GitHub</a>
                 <a href="https://github.com/jota2rz/vdj-video-sync/blob/main/README.md">Developer Documentation</a>
-                <a href="https://github.com/jota2rz/vdj-video-sync/discussions">Discussions</a>
                 <a href="https://github.com/jota2rz/vdj-video-sync/issues">Report Issue</a>
             </div>
             <p>GPL-3.0 · Built with Go, Templ &amp; Tailwind CSS · AI-assisted by Claude Opus 4.6</p>
