@@ -100,7 +100,12 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           GOMEMLIMIT: 6GiB
-        run: go build -p 1 -o ${{ matrix.binary }} .
+        run: |
+          echo "=== Memory before build ==="
+          free -h
+          go build -v -p 1 \
+            -gcflags="github.com/lostromb/concentus/...=-N -l" \
+            -o ${{ matrix.binary }} .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
