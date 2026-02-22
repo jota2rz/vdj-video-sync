@@ -22,15 +22,10 @@ jobs:
             goos: windows
             goarch: amd64
             binary: vdj-video-sync-server.exe
-          - name: macOS arm64
-            os: ubuntu-latest
+          - name: macOS Universal
+            os: macos-latest
             goos: darwin
-            goarch: arm64
-            binary: vdj-video-sync-server
-          - name: macOS amd64
-            os: ubuntu-latest
-            goos: darwin
-            goarch: amd64
+            goarch: ""
             binary: vdj-video-sync-server
           - name: Linux x64
             os: ubuntu-latest
@@ -52,11 +47,18 @@ jobs:
         run: go install github.com/a-h/templ/cmd/templ@latest
 
       - name: Install Tailwind CSS (Linux)
-        if: runner.os != 'Windows'
+        if: runner.os == 'Linux'
         run: |
           curl -sLO "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64"
           chmod +x tailwindcss-linux-x64
           sudo mv tailwindcss-linux-x64 /usr/local/bin/tailwindcss
+
+      - name: Install Tailwind CSS (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl -sLO "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-macos-arm64"
+          chmod +x tailwindcss-macos-arm64
+          sudo mv tailwindcss-macos-arm64 /usr/local/bin/tailwindcss
 
       - name: Install Tailwind CSS (Windows)
         if: runner.os == 'Windows'
@@ -73,36 +75,35 @@ jobs:
         working-directory: server
         run: tailwindcss -i static/css/input.css -o static/css/output.css --minify
 
-      # All targets use pure Go cross-compilation (no CGO).
-      # macOS binaries are cross-compiled from Linux to avoid macOS runner
-      # OOM issues with the large concentus/SILK package.
-      # -p 1 limits parallel compilation to reduce peak memory usage.
-      # The SILK codec package needs excessive RAM to compile, so we add
-      # 8GB swap on Linux runners (7GB RAM) to prevent OOM kills (exit 143).
-      # GOMEMLIMIT caps the Go compiler's heap, forcing aggressive GC.
-      - name: Add swap space (Linux)
-        if: runner.os == 'Linux'
+      # Disable compiler optimizations (-N) and inlining (-l) for the
+      # concentus SILK codec — its transpiled Go files consume excessive
+      # memory during SSA optimization. This flag alone fixes OOM.
+      - name: Build (Universal macOS)
+        if: matrix.goarch == ''
+        working-directory: server
+        env:
+          CGO_ENABLED: "0"
         run: |
-          sudo swapoff /swapfile || true
-          sudo rm -f /swapfile
-          sudo fallocate -l 8G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          echo "Swap enabled:" && swapon --show
-          free -h
+          GOOS=darwin GOARCH=amd64 go build -v -p 1 \
+            -gcflags="github.com/lostromb/concentus/...=-N -l" \
+            -o vdj-video-sync-server-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -v -p 1 \
+            -gcflags="github.com/lostromb/concentus/...=-N -l" \
+            -o vdj-video-sync-server-arm64 .
+          lipo -create -output ${{ matrix.binary }} \
+            vdj-video-sync-server-amd64 vdj-video-sync-server-arm64
+          rm vdj-video-sync-server-amd64 vdj-video-sync-server-arm64
+          file ${{ matrix.binary }}
 
       - name: Build
+        if: matrix.goarch != ''
         working-directory: server
         shell: bash
         env:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          GOMEMLIMIT: 6GiB
         run: |
-          echo "=== Memory before build ==="
-          free -h
           go build -v -p 1 \
             -gcflags="github.com/lostromb/concentus/...=-N -l" \
             -o ${{ matrix.binary }} .
@@ -110,6 +111,6 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: server-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: server-${{ matrix.goos }}-${{ matrix.goarch || 'universal' }}
           path: server/${{ matrix.binary }}
           retention-days: 30
