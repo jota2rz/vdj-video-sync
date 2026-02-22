@@ -156,7 +156,7 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 > **Note:** cpp-httplib and the VirtualDJ SDK are **not distributed** with this project. cpp-httplib is MIT-licensed but too large to vendor in git; the VDJ SDK has no clear open-source license. Download both before building.
 
 ### Server (Go)
-- Go 1.24+
+- Go 1.25+
 - [Templ CLI](https://templ.guide/) — `go install github.com/a-h/templ/cmd/templ@latest`
 - [Tailwind CSS v4 standalone CLI](https://github.com/tailwindlabs/tailwindcss/releases) — download binary and place on PATH
 
@@ -169,7 +169,7 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 cd plugin
 cmake -B build -A x64
 cmake --build build --config Release
-# Output: build/Release/VdjVideoSync.dll
+# Output: build/out/Release/VdjVideoSync.dll
 # Copy to: %USERPROFILE%/AppData/Local/VirtualDJ/Plugins64/SoundEffect/
 ```
 
@@ -178,7 +178,7 @@ cmake --build build --config Release
 cd plugin
 cmake -B build
 cmake --build build --config Release
-# Output: build/Release/VdjVideoSync.bundle
+# Output: build/out/VdjVideoSync.bundle
 # Copy to: ~/Library/Application Support/VirtualDJ/Plugins64/SoundEffect/
 ```
 
@@ -186,7 +186,7 @@ Based on [szemek/virtualdj-plugins-examples](https://github.com/szemek/virtualdj
 
 ### Server
 
-The Go server compiles natively on **Windows**, **macOS**, and **Linux** — all dependencies are pure Go (no CGo).
+The Go Server compiles natively on **Windows**, **macOS**, and **Linux** — all dependencies are pure Go (no CGo).
 
 ```bash
 cd server
@@ -218,15 +218,16 @@ go build -o vdj-video-sync-server.exe .  # Windows
 You can also cross-compile from any OS:
 
 ```bash
-GOOS=windows GOARCH=amd64 go build -o vdj-video-sync-server.exe .
-GOOS=darwin  GOARCH=arm64 go build -o vdj-video-sync-server .
-GOOS=linux   GOARCH=amd64 go build -o vdj-video-sync-server .
+# -gcflags disables optimizations for concentus/SILK to prevent OOM during compilation
+GOOS=windows GOARCH=amd64 go build -gcflags="github.com/lostromb/concentus/...=-N -l" -o vdj-video-sync-server.exe .
+GOOS=darwin  GOARCH=arm64 go build -gcflags="github.com/lostromb/concentus/...=-N -l" -o vdj-video-sync-server .
+GOOS=linux   GOARCH=amd64 go build -gcflags="github.com/lostromb/concentus/...=-N -l" -o vdj-video-sync-server .
 ```
 
 ### Usage
-####Go server and Virtual DJ must run in the same computer
+Server and Virtual DJ must run in the same computer
 
-1. Start the Go server
+1. Start the Server
 2. Put `VdjVideoSync.dll` at `Plugins64/SoundEffect/`
 3. Launch Virtual DJ and enable the Master Effect called `VdjVideoSync`
 4. Open `http://localhost:8090/dashboard` for the control interface
@@ -242,13 +243,13 @@ GOOS=linux   GOARCH=amd64 go build -o vdj-video-sync-server .
 |---------|---------|
 | [templ](https://github.com/a-h/templ) | Type-safe HTML templating |
 | [go-mp4](https://github.com/abema/go-mp4) | MP4 container parsing — extracts audio tracks from video files |
-| [concentus](https://github.com/lostromb/concentus) (Go port) | Pure-Go Opus decoder (SILK + CELT) — decodes audio for BPM analysis |
+| [concentus](https://github.com/lostromb/concentus) (Go port) | Pure-Go Opus decoder (SILK + CELT) (YouTube compatibility) — decodes audio for BPM analysis |
 | [go-aac](https://github.com/skrashevich/go-aac) | Pure-Go AAC decoder — decodes audio for BPM analysis |
-| [sqlite](https://pkg.go.dev/modernc.org/sqlite) | Pure-Go SQLite driver (no CGo) |
+| [sqlite](https://pkg.go.dev/modernc.org/sqlite) | Pure-Go SQLite driver |
 
 All dependencies are **pure Go** — no CGo, no ffmpeg, no native libraries required.
 
-### C++ Plugin
+### Virtual DJ C++ Plugin
 
 | Library | Purpose |
 |---------|---------|
