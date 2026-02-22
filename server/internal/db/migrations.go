@@ -12,6 +12,7 @@ func migrate(db *sql.DB) error {
 
 	-- Default config values (inserted only if not present)
 	INSERT OR IGNORE INTO config (key, value) VALUES ('videos_dir', './videos');
+	INSERT OR IGNORE INTO config (key, value) VALUES ('transition_videos_dir', './transition-videos');
 	INSERT OR IGNORE INTO config (key, value) VALUES ('transition_duration', '3');
 	INSERT OR IGNORE INTO config (key, value) VALUES ('transition_enabled', '1');
 
