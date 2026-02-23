@@ -41,6 +41,9 @@ if(WIN32)
 elseif(APPLE)
     # VirtualDJ macOS plugins are CFBundle (.bundle) files.
     # Based on: https://github.com/szemek/virtualdj-plugins-examples
+    # Link CoreFoundation for CFBundleCopyBundleURL (used by openIniFile)
+    find_library(COREFOUNDATION_LIB CoreFoundation REQUIRED)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${COREFOUNDATION_LIB})
     set_target_properties(${PROJECT_NAME} PROPERTIES
         BUNDLE TRUE
         BUNDLE_EXTENSION "bundle"
