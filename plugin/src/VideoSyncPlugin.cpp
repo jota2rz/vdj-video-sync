@@ -74,19 +74,273 @@ CVideoSyncPlugin::~CVideoSyncPlugin() = default;
 // ── IVdjPlugin8 base ────────────────────────────────────
 
 HRESULT VDJ_API CVideoSyncPlugin::OnLoad() {
-    // Create the HTTP client with hardcoded endpoint
-    std::lock_guard<std::mutex> lock(httpMutex_);
-    httpClient_ = new httplib::Client("http://127.0.0.1:8090");
-    httpClient_->set_connection_timeout(2);
-    httpClient_->set_read_timeout(2);
+    // String params are persisted as plain text in the .ini file
+    DeclareParameterString(paramIP_,   PARAM_IP,   "Server IP",   "IP",   kParamSize);
+    DeclareParameterString(paramPort_, PARAM_PORT, "Server Port", "Port", kParamSize);
+
+#ifdef VDJ_WIN
+    // On Windows, a "Settings" button opens a popup dialog for editing
+    DeclareParameterButton(&settingsBtn_, PARAM_SETTINGS, "Settings", "SET");
+#elif defined(VDJ_MAC)
+    // On macOS, a "Settings" button opens the .ini file in the default text editor
+    DeclareParameterButton(&settingsBtn_, PARAM_SETTINGS, "Settings", "SET");
+#endif
+
+    // Create the HTTP client with current parameters
+    recreateClient();
     return S_OK;
 }
+
+HRESULT VDJ_API CVideoSyncPlugin::OnParameter(int id) {
+    if (id == PARAM_IP || id == PARAM_PORT) {
+        recreateClient();
+    }
+#ifdef VDJ_WIN
+    if (id == PARAM_SETTINGS && settingsBtn_ == 1) {
+        showSettingsPopup();
+        settingsBtn_ = 0;
+    }
+#elif defined(VDJ_MAC)
+    if (id == PARAM_SETTINGS && settingsBtn_ == 1) {
+        openIniFile();
+        settingsBtn_ = 0;
+    }
+#endif
+    return S_OK;
+}
+
+void CVideoSyncPlugin::recreateClient() {
+    std::lock_guard<std::mutex> lock(httpMutex_);
+    delete httpClient_;
+    std::string endpoint = std::string("http://") + paramIP_ + ":" + paramPort_;
+    httpClient_ = new httplib::Client(endpoint);
+    httpClient_->set_connection_timeout(2);
+    httpClient_->set_read_timeout(2);
+}
+
+// ── Win32 Settings Popup ────────────────────────────────
+#ifdef VDJ_WIN
+
+#include "resource.h"
+
+// Data passed between the plugin and the modal dialog
+struct SettingsData {
+    char ip[64];
+    char port[64];
+};
+
+INT_PTR CALLBACK CVideoSyncPlugin::SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_INITDIALOG: {
+        auto* data = reinterpret_cast<SettingsData*>(lParam);
+        SetWindowLongPtrA(hDlg, GWLP_USERDATA, (LONG_PTR)data);
+        SetDlgItemTextA(hDlg, IDC_EDIT_IP,   data->ip);
+        SetDlgItemTextA(hDlg, IDC_EDIT_PORT, data->port);
+        return TRUE;
+    }
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) {
+        case IDOK: {
+            auto* data = reinterpret_cast<SettingsData*>(GetWindowLongPtrA(hDlg, GWLP_USERDATA));
+            GetDlgItemTextA(hDlg, IDC_EDIT_IP,   data->ip,   64);
+            GetDlgItemTextA(hDlg, IDC_EDIT_PORT, data->port, 64);
+            EndDialog(hDlg, IDOK);
+            return TRUE;
+        }
+        case IDCANCEL:
+            EndDialog(hDlg, IDCANCEL);
+            return TRUE;
+        }
+        break;
+    case WM_CLOSE:
+        EndDialog(hDlg, IDCANCEL);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+// Build a DLGTEMPLATE in memory so we don't need a .rc resource file.
+// This creates a small popup dialog with IP/Port edit fields + OK/Cancel.
+static LRESULT showModalDialog(HINSTANCE hInst, HWND hParent, DLGPROC proc, LPARAM lParam) {
+    // Helper lambdas for building the template
+    alignas(4) BYTE buf[1024];
+    memset(buf, 0, sizeof(buf));
+    BYTE* p = buf;
+
+    auto writeWord = [&](WORD v)  { memcpy(p, &v, 2); p += 2; };
+    auto writeDword = [&](DWORD v){ memcpy(p, &v, 4); p += 4; };
+    auto writeShort = [&](short v){ memcpy(p, &v, 2); p += 2; };
+    auto writeWstr = [&](const wchar_t* s) {
+        size_t len = wcslen(s) + 1;
+        memcpy(p, s, len * 2);
+        p += len * 2;
+    };
+    auto alignDword = [&]() {
+        while ((uintptr_t)p & 3) *p++ = 0;
+    };
+
+    // ── DLGTEMPLATE ──
+    // style
+    writeDword(WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | DS_SETFONT | DS_CENTER);
+    writeDword(0);         // dwExtendedStyle
+    writeWord(6);          // cdit (number of controls)
+    writeShort(0);         // x
+    writeShort(0);         // y
+    writeShort(210);       // cx (dialog units)
+    writeShort(70);        // cy
+    writeWord(0);          // menu
+    writeWord(0);          // windowClass
+    writeWstr(L"VDJ Video Sync Settings");  // title
+    writeWord(8);          // font size
+    writeWstr(L"MS Shell Dlg");             // font face
+
+    // ── Control 1: STATIC "Server IP:" ──
+    alignDword();
+    writeDword(WS_CHILD | WS_VISIBLE | SS_RIGHT);  // style
+    writeDword(0);         // exStyle
+    writeShort(4);         // x
+    writeShort(10);        // y
+    writeShort(55);        // cx
+    writeShort(10);        // cy
+    writeWord(IDC_STATIC_IP);
+    writeWord(0xFFFF); writeWord(0x0082);  // STATIC class
+    writeWstr(L"Server IP:");
+    writeWord(0);          // extra
+
+    // ── Control 2: EDIT (IP) ──
+    alignDword();
+    writeDword(WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL);
+    writeDword(WS_EX_CLIENTEDGE);
+    writeShort(62);
+    writeShort(8);
+    writeShort(140);
+    writeShort(14);
+    writeWord(IDC_EDIT_IP);
+    writeWord(0xFFFF); writeWord(0x0081);  // EDIT class
+    writeWstr(L"");
+    writeWord(0);
+
+    // ── Control 3: STATIC "Server Port:" ──
+    alignDword();
+    writeDword(WS_CHILD | WS_VISIBLE | SS_RIGHT);
+    writeDword(0);
+    writeShort(4);
+    writeShort(28);
+    writeShort(55);
+    writeShort(10);
+    writeWord(IDC_STATIC_PORT);
+    writeWord(0xFFFF); writeWord(0x0082);
+    writeWstr(L"Server Port:");
+    writeWord(0);
+
+    // ── Control 4: EDIT (Port) ──
+    alignDword();
+    writeDword(WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL);
+    writeDword(WS_EX_CLIENTEDGE);
+    writeShort(62);
+    writeShort(26);
+    writeShort(140);
+    writeShort(14);
+    writeWord(IDC_EDIT_PORT);
+    writeWord(0xFFFF); writeWord(0x0081);
+    writeWstr(L"");
+    writeWord(0);
+
+    // ── Control 5: BUTTON "OK" ──
+    alignDword();
+    writeDword(WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON);
+    writeDword(0);
+    writeShort(55);
+    writeShort(50);
+    writeShort(50);
+    writeShort(14);
+    writeWord(IDOK);
+    writeWord(0xFFFF); writeWord(0x0080);  // BUTTON class
+    writeWstr(L"OK");
+    writeWord(0);
+
+    // ── Control 6: BUTTON "Cancel" ──
+    alignDword();
+    writeDword(WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON);
+    writeDword(0);
+    writeShort(110);
+    writeShort(50);
+    writeShort(50);
+    writeShort(14);
+    writeWord(IDCANCEL);
+    writeWord(0xFFFF); writeWord(0x0080);
+    writeWstr(L"Cancel");
+    writeWord(0);
+
+    return DialogBoxIndirectParam(hInst, (LPCDLGTEMPLATE)buf, hParent, proc, lParam);
+}
+
+void CVideoSyncPlugin::showSettingsPopup() {
+    // Get VDJ parent for centering
+    HWND hParent = nullptr;
+    double qRes = 0;
+    if (GetInfo("get hwnd", &qRes) == S_OK)
+        hParent = (HWND)(INT_PTR)qRes;
+
+    SettingsData data;
+    strncpy(data.ip,   paramIP_,   sizeof(data.ip));
+    strncpy(data.port, paramPort_, sizeof(data.port));
+    data.ip[sizeof(data.ip) - 1] = '\0';
+    data.port[sizeof(data.port) - 1] = '\0';
+
+    INT_PTR result = showModalDialog(
+        (HINSTANCE)hInstance, hParent, SettingsDlgProc, (LPARAM)&data);
+
+    if (result == IDOK) {
+        strncpy(paramIP_,   data.ip,   kParamSize);
+        strncpy(paramPort_, data.port, kParamSize);
+        paramIP_[kParamSize - 1] = '\0';
+        paramPort_[kParamSize - 1] = '\0';
+        recreateClient();
+    }
+}
+
+#endif
+
+// ── macOS: open .ini in text editor ────────────────
+#ifdef VDJ_MAC
+#include <cstdlib>
+
+void CVideoSyncPlugin::openIniFile() {
+    // hInstance is a CFBundleRef on macOS.
+    // Derive the .ini path: same folder as the .bundle, same name + ".ini"
+    CFBundleRef bundle = (CFBundleRef)hInstance;
+    CFURLRef bundleURL = CFBundleCopyBundleURL(bundle);
+    if (!bundleURL) return;
+
+    // Get the filesystem path of the .bundle directory
+    char bundlePath[1024];
+    if (!CFURLGetFileSystemRepresentation(bundleURL, true, (UInt8*)bundlePath, sizeof(bundlePath))) {
+        CFRelease(bundleURL);
+        return;
+    }
+    CFRelease(bundleURL);
+
+    // bundlePath is e.g. "/path/to/Plugins64/SoundEffect/VdjVideoSync.bundle"
+    // Strip the .bundle extension and append .ini
+    std::string path(bundlePath);
+    auto dotPos = path.rfind('.');
+    if (dotPos != std::string::npos) {
+        path = path.substr(0, dotPos);
+    }
+    path += ".ini";
+
+    // Open in the default text editor
+    std::string cmd = "open \"" + path + "\"";
+    system(cmd.c_str());
+}
+#endif
 
 HRESULT VDJ_API CVideoSyncPlugin::OnGetPluginInfo(TVdjPluginInfo8* info) {
     info->PluginName  = "VDJ Video Sync";
     info->Author      = "vdj-video-sync";
     info->Description = "Sends deck state to an external video sync server";
-    info->Version     = "1.0.0";
+    info->Version     = "0.1.1";
     info->Flags       = 0x00;
     info->Bitmap      = NULL;
     return S_OK;

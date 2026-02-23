@@ -4,7 +4,8 @@
 //
 // A DSP plugin for VirtualDJ 8 that monitors the current deck state
 // (filename, BPM, volume, pitch, play state, etc.) and sends updates
-// via HTTP POST to an external video sync server at 127.0.0.1:8090.
+// via HTTP POST to an external video sync server.
+// The server IP and port are configurable from the VDJ effect settings.
 //
 // Loaded as a Sound Effect — VDJ toggles the effect on/off which
 // triggers OnStart() / OnStop() to begin/end data transmission.
@@ -37,6 +38,13 @@ struct DeckState {
     std::string toJson() const;
 };
 
+// ── Parameter IDs for VDJ UI ────────────────────────────
+enum {
+    PARAM_IP       = 1,
+    PARAM_PORT     = 2,
+    PARAM_SETTINGS = 3,   // Button – opens the settings popup
+};
+
 // ── Plugin class ────────────────────────────────────────
 class CVideoSyncPlugin : public IVdjPluginDsp8
 {
@@ -48,6 +56,7 @@ public:
     HRESULT VDJ_API OnLoad()                                 override;
     HRESULT VDJ_API OnGetPluginInfo(TVdjPluginInfo8*)        override;
     ULONG   VDJ_API Release()                                override;
+    HRESULT VDJ_API OnParameter(int id)                      override;
 
     // IVdjPluginDsp8 overrides
     HRESULT VDJ_API OnStart()                                override;
@@ -61,6 +70,23 @@ private:
     void pollLoop();
     DeckState readDeckState(int deck);
     void sendUpdate(const DeckState& state);
+    void recreateClient();
+#ifdef VDJ_WIN
+    void showSettingsPopup();
+#elif defined(VDJ_MAC)
+    void openIniFile();
+#endif
+
+    // ── Configurable parameters (persisted as plain text in VDJ .ini) ──
+    static constexpr int kParamSize = 64;
+    char paramIP_[kParamSize]   = "127.0.0.1";
+    char paramPort_[kParamSize] = "8090";
+
+    // ── Settings button ─────────────────────────────────────
+    int settingsBtn_ = 0;
+#ifdef VDJ_WIN
+    static INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam);
+#endif
 
     // ── Internals ───────────────────────────────────────
     int                      pollIntervalMs_ = 50;
