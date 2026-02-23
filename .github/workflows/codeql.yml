@@ -6,18 +6,12 @@ on:
     paths-ignore:
       - "*.md"
       - "docs/**"
-      - "*.html"
-      - "*.css"
-      - "*.js"
       - "previous-prototype/**"
   pull_request:
     branches: [main]
     paths-ignore:
       - "*.md"
       - "docs/**"
-      - "*.html"
-      - "*.css"
-      - "*.js"
       - "previous-prototype/**"
   schedule:
     - cron: "0 6 * * 1" # Weekly on Monday at 06:00 UTC
@@ -40,6 +34,9 @@ jobs:
           - language: c-cpp
             os: windows-latest
             build-mode: manual
+          - language: javascript-typescript
+            os: ubuntu-latest
+            build-mode: none
 
     steps:
       - name: Checkout
