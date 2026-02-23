@@ -37,6 +37,9 @@ jobs:
           - language: javascript-typescript
             os: ubuntu-latest
             build-mode: none
+          - language: actions
+            os: ubuntu-latest
+            build-mode: none
 
     steps:
       - name: Checkout
