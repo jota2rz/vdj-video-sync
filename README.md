@@ -236,14 +236,14 @@ GOOS=linux   GOARCH=amd64 go build -p 1 -gcflags="github.com/lostromb/concentus/
 ```
 
 ### Usage
-> **Note:** Server and VirtualDJ must run on the same computer.
 
 1. Start the server — the dashboard opens automatically in your default browser
 2. Put `VdjVideoSync.dll` at `Plugins64/SoundEffect/`
 3. Launch VirtualDJ and enable the Master Effect called `VdjVideoSync`
-4. Open `http://localhost:8090/player` in a separate window/tab/screen for fullscreen video output
-5. Place video files in the configured videos directory (`.mp4` with AAC or Opus SILK or CELT audio, this means it's YouTube compatible)
-6. Place transition videos in the transition videos directory
+4. *(Optional)* To change the server IP or port, open **Effect Controls** and click **Set IP** or **Set Port** — values are validated and saved automatically
+5. Open `http://localhost:8090/player` in a separate window/tab/screen for fullscreen video output
+6. Place video files in the configured videos directory (`.mp4` with AAC or Opus SILK or CELT audio, this means it's YouTube compatible)
+7. Place transition videos in the transition videos directory
 
 #### Server flags
 
