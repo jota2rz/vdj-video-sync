@@ -42,7 +42,8 @@ struct DeckState {
 enum {
     PARAM_IP       = 1,
     PARAM_PORT     = 2,
-    PARAM_SETTINGS = 3,   // Button – opens the settings popup
+    PARAM_SET_IP   = 3,   // Button – opens VDJ dialog for IP
+    PARAM_SET_PORT = 4,   // Button – opens VDJ dialog for Port
 };
 
 // ── Plugin class ────────────────────────────────────────
@@ -57,6 +58,7 @@ public:
     HRESULT VDJ_API OnGetPluginInfo(TVdjPluginInfo8*)        override;
     ULONG   VDJ_API Release()                                override;
     HRESULT VDJ_API OnParameter(int id)                      override;
+    HRESULT VDJ_API OnGetParameterString(int id, char* outParam, int outParamSize) override;
 
     // IVdjPluginDsp8 overrides
     HRESULT VDJ_API OnStart()                                override;
@@ -71,27 +73,27 @@ private:
     DeckState readDeckState(int deck);
     void sendUpdate(const DeckState& state);
     void recreateClient();
-#ifdef VDJ_WIN
-    void showSettingsPopup();
-#elif defined(VDJ_MAC)
-    void openIniFile();
-#endif
 
-    // ── Configurable parameters (persisted as plain text in VDJ .ini) ──
+    // ── VDJ variable sync (native set_var_dialog) ───────────
+    void pushParamsToVars();          // push internal buffers → VDJ vars
+    void applyVarChanges();           // read VDJ vars, update params if changed
+    void settingsWatchLoop();         // always-on loop that polls VDJ vars
+
+    // ── Configurable parameters (persisted via DeclareParameterString .ini) ──
     static constexpr int kParamSize = 64;
     char paramIP_[kParamSize]   = "127.0.0.1";
     char paramPort_[kParamSize] = "8090";
 
-    // ── Settings button ─────────────────────────────────────
-    int settingsBtn_ = 0;
-#ifdef VDJ_WIN
-    static INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam);
-#endif
+    // ── Settings buttons ────────────────────────────────────
+    int setIpBtn_   = 0;
+    int setPortBtn_ = 0;
 
     // ── Internals ───────────────────────────────────────
     int                      pollIntervalMs_ = 50;
     std::thread              worker_;
     std::atomic<bool>        running_{false};
+    std::thread              settingsWatcher_;
+    std::atomic<bool>        watcherRunning_{false};
     std::mutex               httpMutex_;
     httplib::Client*         httpClient_ = nullptr;
 

@@ -121,7 +121,6 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 │   │   ├── VideoSyncPlugin.h
 │   │   ├── VideoSyncPlugin.cpp
 │   │   ├── VdjVideoSync.def    # DLL exports
-│   │   ├── resource.h          # Dialog control IDs
 │   │   └── Info.plist.in       # macOS bundle plist template
 │   └── vendor/
 │       └── httplib.h           # cpp-httplib (downloaded automatically by CI; for local builds, download manually)
