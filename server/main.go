@@ -23,9 +23,10 @@ import (
 
 func main() {
 	// ── Flags ───────────────────────────────────────────
-	addr := flag.String("addr", ":8090", "HTTP listen address")
+	port := flag.String("port", ":8090", "HTTP listen port")
 	dbPath := flag.String("db", "vdj-video-sync.db", "SQLite database path")
 	videosDir := flag.String("videos", "./videos", "Directory containing video files")
+	transitionVideosDir := flag.String("transition-videos", "./transition-videos", "Directory containing transition video files")
 	debug := flag.Bool("debug", false, "Enable debug logging")
 	noBrowser := flag.Bool("no-browser", false, "Do not open the dashboard in a browser on startup")
 	flag.Parse()
@@ -60,7 +61,7 @@ func main() {
 	vDir := cfg.Get("videos_dir", *videosDir)
 	matcher := video.NewMatcher(vDir, "/videos/", bpmCache)
 
-	tDir := cfg.Get("transition_videos_dir", "./transition-videos")
+	tDir := cfg.Get("transition_videos_dir", *transitionVideosDir)
 	transitionMatcher := video.NewMatcher(tDir, "/transition-videos/", bpmCache)
 
 	// ── Routes ──────────────────────────────────────────
@@ -117,7 +118,7 @@ func main() {
 
 	// ── HTTP Server ────────────────────────────────────────
 	srv := &http.Server{
-		Addr:         *addr,
+		Addr:         *port,
 		Handler:      mux,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 0, // SSE needs unlimited write time
@@ -125,7 +126,7 @@ func main() {
 	}
 
 	go func() {
-		slog.Info("HTTP server starting", "addr", *addr)
+		slog.Info("HTTP server starting", "addr", *port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("HTTP server error", "error", err)
 			os.Exit(1)
@@ -134,11 +135,11 @@ func main() {
 
 	// ── Dashboard URL ─────────────────────────────────────
 	// Resolve the listen address to an actual URL (handle ":port" form).
-	host, port, _ := net.SplitHostPort(*addr)
+	host, portNum, _ := net.SplitHostPort(*port)
 	if host == "" {
 		host = "localhost"
 	}
-	dashURL := fmt.Sprintf("http://%s/dashboard", net.JoinHostPort(host, port))
+	dashURL := fmt.Sprintf("http://%s/dashboard", net.JoinHostPort(host, portNum))
 	slog.Info("dashboard available", "url", dashURL)
 
 	// Auto-open browser (skipped in debug mode and with -no-browser).

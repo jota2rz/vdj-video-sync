@@ -108,15 +108,23 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 ## Project Structure
 
 ```
+├── .github/workflows/          # CI/CD pipelines
+│   ├── build-plugin.yml        # Plugin builds (Windows x64, macOS arm64/amd64)
+│   └── build-server.yml        # Server builds (Windows x64, macOS Universal, Linux x64)
+│
+├── docs/                       # GitHub Pages site (download page)
+│
 ├── plugin/                     # C++ VirtualDJ plugin
 │   ├── CMakeLists.txt
 │   ├── src/
 │   │   ├── main.cpp            # DllGetClassObject entry point
 │   │   ├── VideoSyncPlugin.h
 │   │   ├── VideoSyncPlugin.cpp
-│   │   └── VdjVideoSync.def    # DLL exports
+│   │   ├── VdjVideoSync.def    # DLL exports
+│   │   ├── resource.h          # Dialog control IDs
+│   │   └── Info.plist.in       # macOS bundle plist template
 │   └── vendor/
-│       └── httplib.h           # cpp-httplib (download separately)
+│       └── httplib.h           # cpp-httplib (downloaded automatically by CI; for local builds, download manually)
 │
 ├── server/                     # Go server
 │   ├── main.go                 # HTTP server, routing, CLI flags
@@ -126,8 +134,9 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 │   │   ├── bpm/                # Audio BPM analysis (AAC/Opus → onset detection)
 │   │   │   ├── bpm.go          # MP4 parsing, codec detection, autocorrelation
 │   │   │   └── cache.go        # SQLite-backed BPM cache
+│   │   ├── browser/            # Auto-open dashboard in browser on startup
 │   │   ├── config/             # Thread-safe key-value config (SQLite-backed)
-│   │   ├── db/                 # Database init & migrations
+│   │   ├── db/                 # Database init & schema
 │   │   ├── handlers/           # HTTP & SSE handlers
 │   │   ├── models/             # Shared data types
 │   │   ├── sse/                # Pub/sub hub for Server-Sent Events
@@ -142,7 +151,9 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 │           ├── app.js          # All client-side logic (~2000 lines)
 │           └── sse-worker.js   # SharedWorker for SSE connection sharing
 │
-└── mp4-samples/                # Test video files
+├── VirtualDJ8_SDK_20211003/    # VDJ SDK headers (downloaded automatically by CI; for local builds, download manually)
+│
+└── LICENSE.md
 ```
 
 ## Prerequisites
@@ -213,7 +224,7 @@ tailwindcss -i static/css/input.css -o static/css/output.css --minify
 # -p 1 and -gcflags prevent OOM from concentus/SILK codec compilation
 go build -p 1 -gcflags="github.com/lostromb/concentus/...=-N -l" -o vdj-video-sync-server .    # Linux / macOS
 go build -p 1 -gcflags="github.com/lostromb/concentus/...=-N -l" -o vdj-video-sync-server.exe .  # Windows
-./vdj-video-sync-server -addr :8090 -videos ./videos
+./vdj-video-sync-server -port :8090 -videos ./videos
 ```
 
 You can also cross-compile from any OS:
@@ -239,9 +250,10 @@ GOOS=linux   GOARCH=amd64 go build -p 1 -gcflags="github.com/lostromb/concentus/
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-addr` | `:8090` | HTTP listen address |
+| `-port` | `:8090` | HTTP listen port |
 | `-db` | `vdj-video-sync.db` | SQLite database path |
 | `-videos` | `./videos` | Directory containing video files |
+| `-transition-videos` | `./transition-videos` | Directory containing transition video files |
 | `-debug` | `false` | Enable debug logging (also disables auto-open browser) |
 | `-no-browser` | `false` | Do not open the dashboard in a browser on startup |
 
@@ -267,8 +279,8 @@ All dependencies are **pure Go** — no CGo, no ffmpeg, no native libraries requ
 
 | Library | Purpose |
 |---------|---------|
-| [cpp-httplib](https://github.com/yhirose/cpp-httplib) | Single-header HTTP client for sending deck state (not distributed — download separately) |
-| [VirtualDJ SDK](https://virtualdj.com/wiki/Developers) | Plugin interface headers (not distributed — download separately) |
+| [cpp-httplib](https://github.com/yhirose/cpp-httplib) | Single-header HTTP client for sending deck state (downloaded automatically by CI; for local builds, download manually) |
+| [VirtualDJ SDK](https://virtualdj.com/wiki/Developers) | Plugin interface headers (downloaded automatically by CI; for local builds, download manually) |
 
 ### Frontend
 
