@@ -78,7 +78,7 @@ jobs:
         if: matrix.language == 'c-cpp'
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://www.virtualdj.com/download/vdjsdk.zip" -OutFile sdk.zip
+          Invoke-WebRequest -Uri "https://www.virtualdj.com/developers/VirtualDJ8_SDK_20211003.zip" -OutFile sdk.zip
           Expand-Archive sdk.zip -DestinationPath VirtualDJ8_SDK_20211003 -Force
 
       - name: Download cpp-httplib
