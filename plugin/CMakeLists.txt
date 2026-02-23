@@ -58,13 +58,7 @@ elseif(APPLE)
     # macOS minimum deployment target (consistent with VDJ SDK examples)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "" FORCE)
 else()
-    # Linux: only for CodeQL static analysis — not a real build target.
-    # VirtualDJ only runs on Windows and macOS.
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-        PREFIX ""
-        OUTPUT_NAME "VdjVideoSync"
-        SUFFIX ".so"
-    )
+    message(FATAL_ERROR "VirtualDJ only runs on Windows and macOS. This plugin cannot be built on ${CMAKE_SYSTEM_NAME}.")
 endif()
 
 # ── Output directory ────────────────────────────────────

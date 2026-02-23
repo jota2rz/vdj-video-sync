@@ -23,18 +23,22 @@ permissions:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - language: go
+            os: ubuntu-latest
             build-mode: manual
           - language: c-cpp
+            os: windows-latest
             build-mode: manual
           - language: javascript-typescript
+            os: ubuntu-latest
             build-mode: none
           - language: actions
+            os: ubuntu-latest
             build-mode: none
 
     steps:
@@ -60,24 +64,26 @@ jobs:
         working-directory: server
         run: go build -p 1 -gcflags="github.com/lostromb/concentus/...=-N -l" -o /dev/null ./...
 
-      # ── C++ build ─────────────────────────────────────
+      # ── C++ build (Windows — VDJ SDK requires Win32 types) ──
       - name: Download VirtualDJ SDK
         if: matrix.language == 'c-cpp'
+        shell: pwsh
         run: |
-          curl -L -o sdk.zip "https://virtualdj.com/developers/VirtualDJ8_SDK_20211003.zip"
-          unzip -o sdk.zip -d VirtualDJ8_SDK_20211003
+          Invoke-WebRequest -Uri "https://www.virtualdj.com/developers/VirtualDJ8_SDK_20211003.zip" -OutFile sdk.zip
+          Expand-Archive sdk.zip -DestinationPath VirtualDJ8_SDK_20211003 -Force
 
       - name: Download cpp-httplib
         if: matrix.language == 'c-cpp'
+        shell: pwsh
         run: |
-          mkdir -p plugin/vendor
-          curl -L -o plugin/vendor/httplib.h "https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.32.0/httplib.h"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.32.0/httplib.h" -OutFile plugin/vendor/httplib.h
 
       - name: Build C++ plugin (CodeQL traced)
         if: matrix.language == 'c-cpp'
+        shell: pwsh
         run: |
           cd plugin
-          cmake -B build
+          cmake -B build -A x64
           cmake --build build --config Release
 
       - name: Perform CodeQL Analysis
