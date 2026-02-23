@@ -109,6 +109,8 @@ class DeckSSE {
     this.libraryListeners = [];
     /** @type {((data: object) => void)[]} */
     this.configListeners = [];
+    /** @type {((data: object) => void)[]} */
+    this.transitionsUpdatedListeners = [];
     /** Last transition-pool event data (for replay on late subscribers) */
     this.lastTransitionPool = null;
     /** Cached deck visibility states (for replay on late subscribers) @type {Record<number, object>} */
@@ -153,6 +155,9 @@ class DeckSSE {
           break;
         case "config-updated":
           this.configListeners.forEach((fn) => fn(data));
+          break;
+        case "transitions-updated":
+          this.transitionsUpdatedListeners.forEach((fn) => fn(data));
           break;
       }
     } catch (err) {
@@ -208,7 +213,7 @@ class DeckSSE {
     const events = [
       "deck-update", "transition-pool", "transition-play",
       "deck-visibility", "analysis-status", "library-updated",
-      "config-updated",
+      "config-updated", "transitions-updated",
     ];
     for (const name of events) {
       this.source.addEventListener(name, (e) => this._dispatch(name, e.data));
@@ -278,6 +283,16 @@ class DeckSSE {
   /** Remove a previously registered config-updated listener */
   offConfig(fn) {
     this.configListeners = this.configListeners.filter((f) => f !== fn);
+  }
+
+  /** @param {(data: object) => void} fn */
+  onTransitionsUpdated(fn) {
+    this.transitionsUpdatedListeners.push(fn);
+  }
+
+  /** Remove a previously registered transitions-updated listener */
+  offTransitionsUpdated(fn) {
+    this.transitionsUpdatedListeners = this.transitionsUpdatedListeners.filter((f) => f !== fn);
   }
 }
 
@@ -528,8 +543,10 @@ function initDashboard() {
     if (!banner) return;
     if (extraDecksPlaying.size > 0) {
       banner.classList.remove("hidden");
+      banner.classList.add("flex");
     } else {
       banner.classList.add("hidden");
+      banner.classList.remove("flex");
     }
   }
 
@@ -1054,6 +1071,7 @@ function initLibrary() {
 
   // Load video library (default tab: song)
   loadVideoList(activeLibraryTab);
+  updateLibraryWarning();
 
   // Auto-refresh when server detects file changes via SSE
   const sse = getSSE();
@@ -1062,6 +1080,7 @@ function initLibrary() {
     if (!data.type || data.type === activeLibraryTab) {
       loadVideoList(activeLibraryTab);
     }
+    updateLibraryWarning();
   };
   sse.onLibraryUpdated(onLibraryUpdated);
 
@@ -1164,6 +1183,38 @@ function initLibrary() {
       preview.pause();
     }
   };
+}
+
+function updateLibraryWarning() {
+  const banner = document.getElementById("library-warning");
+  const text = document.getElementById("library-warning-text");
+  if (!banner || !text) return;
+
+  Promise.all([
+    fetch("/api/videos").then((r) => r.json()),
+    fetch("/api/videos?type=transition").then((r) => r.json()),
+  ])
+    .then(([songVideos, transVideos]) => {
+      const noSong = !songVideos || songVideos.length === 0;
+      const noTrans = !transVideos || transVideos.length === 0;
+      if (noSong && noTrans) {
+        text.textContent = "No song videos or transition videos found. Add video files to the configured directories.";
+        banner.classList.remove("hidden");
+        banner.classList.add("flex");
+      } else if (noSong) {
+        text.textContent = "No song videos found. Deck playback will have no video content.";
+        banner.classList.remove("hidden");
+        banner.classList.add("flex");
+      } else if (noTrans) {
+        text.textContent = "No transition videos found. Deck switches will play without a transition overlay.";
+        banner.classList.remove("hidden");
+        banner.classList.add("flex");
+      } else {
+        banner.classList.add("hidden");
+        banner.classList.remove("flex");
+      }
+    })
+    .catch(() => {});
 }
 
 function loadVideoList(type = "song") {
@@ -1357,6 +1408,9 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
   let transitionInProgress = false;
   /** Pending play command received from server */
   let pendingPlaySlot = null;
+  /** Pending CSS effects from the server's transition-play event */
+  let pendingInCSS = "";
+  let pendingOutCSS = "";
   /** Buffer index currently being played (-1 = none) */
   let playingBufferIdx = -1;
   /** Deferred pool data for buffers that couldn't be replaced mid-play */
@@ -1423,6 +1477,12 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
       .then((blob) => {
         // If path changed while fetching, discard this result
         if (buf.path !== target) return;
+        // Don't replace a buffer that a transition is actively playing —
+        // this would reset readyState and freeze the video at frame 0.
+        if (idx === playingBufferIdx) {
+          console.log(ts(), `[player] skipping buffer ${idx} source swap (in use by transition)`);
+          return;
+        }
         if (buf.blobUrl) URL.revokeObjectURL(buf.blobUrl);
         buf.blobUrl = URL.createObjectURL(blob);
         buf.video.preload = "auto";
@@ -1457,12 +1517,14 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
 
   /** SSE transition-play handler: server says to play slot N */
   const onTransitionPlay = (data) => {
-    // The server tells us which slot to play.  The actual deck switch
-    // is detected client-side by updatePriority(), which calls
-    // playTransition().  We just record which slot the server chose.
+    // The server tells us which slot to play and which CSS effects to use.
+    // The actual deck switch is detected client-side by updatePriority(),
+    // which calls playTransition().  We record the slot and effects.
     if (data?.slot !== undefined) {
       pendingPlaySlot = data.slot;
-      console.log(ts(), `[player] server says play slot ${data.slot}`);
+      pendingInCSS = data.inCSS || "";
+      pendingOutCSS = data.outCSS || "";
+      console.log(ts(), `[player] server says play slot ${data.slot} (inCSS=${!!data.inCSS}, outCSS=${!!data.outCSS})`);
     }
   };
 
@@ -1503,22 +1565,32 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
   }
 
   /**
-   * Play the transition video on top for 3 seconds, swapping decks
-   * underneath.  Falls back to an instant swap when neither buffer
-   * is ready.  If a buffer is loading, waits up to 2s.
+   * Play the transition video on top, swapping decks underneath.
+   * Falls back to an instant swap when no buffer is ready.
+   * If a buffer is loading, waits up to 2s.
+   *
+   * If a transition is already in progress, the request is queued
+   * (latest wins — at most 1 pending).  The queued transition replays
+   * automatically after the current one finishes.
    */
+  let queuedTransition = null; // { newDeck, swapFn }
+
   function playTransition(newDeck, swapFn) {
     if (!transitionsEnabled) {
       console.log(ts(), "[player] transition skipped (disabled)");
       pendingPlaySlot = null;
+      pendingInCSS = "";
+      pendingOutCSS = "";
       swapFn();
       return;
     }
     if (transitionInProgress) {
-      console.log(ts(), "[player] transition skipped (already in progress)");
-      pendingPlaySlot = null; // release so pool updates aren't deferred
-      discardDeferredPool(); // don't load — preserve ready buffers as fallbacks
-      swapFn();
+      // Queue this request — latest wins.  Don't swap decks now because
+      // the transition video may be semi-transparent ("out" phase).
+      // Don't snapshot slot/CSS — pendingPlaySlot is deterministic from
+      // the SSE event and will be consumed when the queue drains.
+      queuedTransition = { newDeck, swapFn };
+      console.log(ts(), `[player] transition queued (deck ${newDeck}) — current still in progress`);
       return;
     }
 
@@ -1542,8 +1614,10 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
             } else {
               console.log(ts(), `[player] transition skipped after wait (buf0=${transBuffers[0].video.readyState}, buf1=${transBuffers[1].video.readyState}, buf2=${transBuffers[2].video.readyState})`);
               transitionInProgress = false;
-              pendingPlaySlot = null; // release so pool updates aren't deferred
-              applyDeferredPool(); // retry stalled loads (all buffers already unready)
+              pendingPlaySlot = null;
+              pendingInCSS = "";
+              pendingOutCSS = "";
+              applyDeferredPool();
               swapFn();
             }
           }
@@ -1552,8 +1626,10 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
       }
 
       console.log(ts(), `[player] transition skipped (buf0=${transBuffers[0].video.readyState}, buf1=${transBuffers[1].video.readyState}, buf2=${transBuffers[2].video.readyState})`);
-      pendingPlaySlot = null; // release so pool updates aren't deferred
-      applyDeferredPool(); // retry stalled loads (all buffers already unready)
+      pendingPlaySlot = null;
+      pendingInCSS = "";
+      pendingOutCSS = "";
+      applyDeferredPool();
       swapFn();
       return;
     }
@@ -1569,8 +1645,35 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
     playingBufferIdx = chosenIdx;
     pendingPlaySlot = null; // consumed
 
+    // Capture and consume CSS effects for this transition
+    const inCSS = pendingInCSS;
+    const outCSS = pendingOutCSS;
+    pendingInCSS = "";
+    pendingOutCSS = "";
+
+    // ── Phase durations ──
+    // 15% in effect → 70% hold (video plays unadorned) → 15% out effect.
+    // The deck swap happens right after the "in" effect finishes.
+    // If only one phase has an effect, it keeps its 15% share; the
+    // hold period absorbs the missing phase's 15%.
+    const hasIn = !!inCSS;
+    const hasOut = !!outCSS;
+    const inMs   = hasIn  ? transitionDurationMs * 0.15 : 0;
+    const outMs  = hasOut ? transitionDurationMs * 0.15 : 0;
+    const holdMs = transitionDurationMs - inMs - outMs;
+    const inSec  = (inMs  / 1000).toFixed(2);
+    const outSec = (outMs / 1000).toFixed(2);
+
     // Bring chosen transition video on top of deck videos
     tv.style.zIndex = "20";
+
+    // ── Inject CSS effect style element ──
+    let fxStyle = null;
+    if (hasIn || hasOut) {
+      fxStyle = document.createElement("style");
+      fxStyle.id = "transition-live-fx";
+      document.head.appendChild(fxStyle);
+    }
 
     // ── Sync playback rate to new deck's BPM + pitch ──
     const newState = deckStates[newDeck];
@@ -1591,7 +1694,7 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
     rate = Math.max(0.25, Math.min(4, rate));
     tv.playbackRate = rate;
     if (onTransitionChange) onTransitionChange({ inProgress: true, rate });
-    console.log(ts(), `[player] transition playing from buffer ${chosenIdx} (rate=${rate.toFixed(2)})`);
+    console.log(ts(), `[player] transition playing from buffer ${chosenIdx} (rate=${rate.toFixed(2)}, in=${inSec}s, hold=${(holdMs/1000).toFixed(2)}s, out=${outSec}s)`);
 
     // Seek to start and play
     tv.currentTime = 0;
@@ -1601,20 +1704,97 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
       console.warn(ts(), "[player] transition play() failed:", err.message);
     });
 
-    // Swap decks underneath immediately
-    swapFn();
+    // ── Deck swap tracking ──
+    let swapDone = false;
+    function ensureSwap() {
+      if (!swapDone) { swapDone = true; swapFn(); }
+    }
 
-    // After configured duration, hide transition and apply deferred pool updates
-    setTimeout(() => {
+    /** Clean up everything after the transition ends */
+    let cleaned = false;
+    function cleanup() {
+      if (cleaned) return;
+      cleaned = true;
+      ensureSwap(); // guarantee deck swap happened
+      tv.classList.remove("transition-active");
+      if (fxStyle) fxStyle.remove();
       tv.style.zIndex = "-1";
       tv.pause();
       transitionInProgress = false;
       playingBufferIdx = -1;
       if (onTransitionChange) onTransitionChange({ inProgress: false, rate: 0 });
-
-      // Apply any deferred pool data that arrived while we were playing
       applyDeferredPool();
-    }, transitionDurationMs);
+      // If another transition was queued, replay it now
+      if (queuedTransition) {
+        const q = queuedTransition;
+        queuedTransition = null;
+        console.log(ts(), `[player] draining queued transition (deck ${q.newDeck})`);
+        playTransition(q.newDeck, q.swapFn);
+      }
+    }
+
+    /** Start the "out" phase: swap decks (now invisible behind opaque
+     *  transition video), then animate the transition video away. */
+    let outStarted = false;
+    function startOutPhase() {
+      if (outStarted || cleaned) return;
+      outStarted = true;
+      // Swap the master video while fully hidden behind transition
+      ensureSwap();
+      console.log(ts(), "[player] decks swapped (hidden behind transition)");
+
+      // Remove "in" class (if any) now that "in" is done
+      tv.classList.remove("transition-active");
+      if (fxStyle) fxStyle.textContent = "";
+
+      // After the hold period, start the "out" effect (or clean up)
+      setTimeout(() => {
+        if (cleaned) return;
+        if (hasOut) {
+          // Inject "out" CSS and trigger animation
+          fxStyle.textContent = outCSS.replace(/var\(--transition-duration\)/g, `${outSec}s`);
+          void tv.offsetWidth; // force reflow
+          tv.classList.add("transition-active");
+
+          // Listen for the "out" animation to finish
+          const onOutEnd = () => {
+            tv.removeEventListener("animationend", onOutEnd);
+            cleanup();
+          };
+          tv.addEventListener("animationend", onOutEnd);
+          // Safety timeout in case animationend doesn't fire
+          setTimeout(() => {
+            tv.removeEventListener("animationend", onOutEnd);
+            cleanup();
+          }, outMs + 500);
+        } else {
+          cleanup();
+        }
+      }, holdMs);
+    }
+
+    // ── "In" phase: animate the transition video into view ──
+    if (hasIn) {
+      fxStyle.textContent = inCSS.replace(/var\(--transition-duration\)/g, `${inSec}s`);
+      tv.classList.add("transition-active");
+
+      // Wait for the "in" animation to finish before swapping decks
+      const onInEnd = () => {
+        tv.removeEventListener("animationend", onInEnd);
+        console.log(ts(), "[player] 'in' effect finished");
+        startOutPhase();
+      };
+      tv.addEventListener("animationend", onInEnd);
+      // Safety timeout in case animationend doesn't fire
+      setTimeout(() => {
+        if (cleaned) return;
+        tv.removeEventListener("animationend", onInEnd);
+        startOutPhase();
+      }, inMs + 500);
+    } else {
+      // No "in" effect — swap immediately and go to "out" phase
+      startOutPhase();
+    }
   }
 
   // ── Helpers ──
@@ -2015,6 +2195,425 @@ function stripExt(name) {
   return i > 0 ? name.substring(0, i) : name;
 }
 
+// ─── Transitions Page ───────────────────────────────────
+
+function initTransitions() {
+  let selectedEffect = null;
+  let previewVideos = null;
+
+  const inList = document.getElementById("transition-in-list");
+  const outList = document.getElementById("transition-out-list");
+  const previewBtn = document.getElementById("preview-transition-btn");
+  const refreshBtn = document.getElementById("preview-refresh-btn");
+  const effectNameLabel = document.getElementById("preview-effect-name");
+  const previewCss = document.getElementById("transition-preview-css");
+  const addBtn = document.getElementById("add-transition-btn");
+  const modal = document.getElementById("transition-modal");
+  const modalBackdrop = document.getElementById("transition-modal-backdrop");
+  const modalTitle = document.getElementById("transition-modal-title");
+  const modalClose = document.getElementById("transition-modal-close");
+  const modalCancel = document.getElementById("transition-modal-cancel");
+  const modalSave = document.getElementById("transition-modal-save");
+  const inputName = document.getElementById("effect-name");
+  const inputDir = document.getElementById("effect-direction");
+  const inputCss = document.getElementById("effect-css");
+  const editId = document.getElementById("effect-edit-id");
+
+  const beforeVid = document.getElementById("preview-before");
+  const transVid = document.getElementById("preview-transition");
+  const afterVid = document.getElementById("preview-after");
+  const placeholder = document.getElementById("preview-stage-placeholder");
+
+  // ── Load effects ──
+  async function loadEffects() {
+    try {
+      const res = await fetch("/api/transitions");
+      const effects = await res.json();
+      const inEffects = effects.filter((e) => e.direction === "in");
+      const outEffects = effects.filter((e) => e.direction === "out");
+      renderList(inList, inEffects, "in");
+      renderList(outList, outEffects, "out");
+      updateWarningBanner(inEffects, outEffects);
+    } catch (err) {
+      console.error(ts(), "[transitions] load error:", err);
+    }
+  }
+
+  function updateWarningBanner(inEffects, outEffects) {
+    const banner = document.getElementById("transition-warning");
+    const text = document.getElementById("transition-warning-text");
+    if (!banner || !text) return;
+    const noIn = !inEffects.some((e) => e.enabled);
+    const noOut = !outEffects.some((e) => e.enabled);
+    if (noIn && noOut) {
+      text.textContent = "All transition effects are disabled. Transitions will play without any visual effects.";
+      banner.classList.remove("hidden");
+      banner.classList.add("flex");
+    } else if (noIn) {
+      text.textContent = "All \u201CIn\u201D effects are disabled. Transitions will play without an intro effect.";
+      banner.classList.remove("hidden");
+      banner.classList.add("flex");
+    } else if (noOut) {
+      text.textContent = "All \u201COut\u201D effects are disabled. Transitions will play without an outro effect.";
+      banner.classList.remove("hidden");
+      banner.classList.add("flex");
+    } else {
+      banner.classList.add("hidden");
+      banner.classList.remove("flex");
+    }
+  }
+
+  function renderList(container, effects, direction) {
+    if (effects.length === 0) {
+      container.innerHTML = '<p class="text-gray-500 text-sm">No effects defined</p>';
+      return;
+    }
+    container.innerHTML = effects
+      .map(
+        (e) => `
+      <div class="flex items-center justify-between rounded-lg border px-3 py-2 group cursor-pointer transition-colors hover:border-indigo-500 ${selectedEffect && selectedEffect.id === e.id ? "border-indigo-500 bg-gray-800" : "border-gray-800"} ${!e.enabled ? "opacity-50" : ""} bg-gray-900"
+           data-effect-id="${e.id}" data-effect-dir="${e.direction}">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="inline-block w-2 h-2 rounded-full ${direction === "in" ? "bg-indigo-400" : "bg-rose-400"}"></span>
+          <span class="text-sm text-gray-200 truncate">${escapeHtml(e.name)}</span>
+          <span class="text-xs text-gray-500 uppercase">${e.direction}</span>
+          ${e.isSeed ? '<span class="text-[10px] text-gray-600 border border-gray-700 rounded px-1">BUILT-IN</span>' : ""}
+          ${!e.enabled ? '<span class="text-[10px] text-yellow-600 border border-yellow-800 rounded px-1">DISABLED</span>' : ""}
+        </div>
+        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button data-toggle="${e.id}" data-currently-enabled="${e.enabled}" class="p-1 ${e.enabled ? "text-green-400 hover:text-yellow-400" : "text-yellow-500 hover:text-green-400"}" title="${e.enabled ? "Disable" : "Enable"}">
+            ${e.enabled
+              ? '<svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>'
+              : '<svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>'}
+          </button>
+          <button data-edit="${e.id}" class="p-1 text-gray-400 hover:text-white" title="Edit">
+            <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+            </svg>
+          </button>
+          ${!e.isSeed ? `<button data-delete="${e.id}" class="p-1 text-gray-400 hover:text-red-400" title="Delete">
+            <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+            </svg>
+          </button>` : ""}
+        </div>
+      </div>`
+      )
+      .join("");
+
+    // Bind click handlers
+    container.querySelectorAll("[data-effect-id]").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        // Skip if clicking action buttons
+        if (e.target.closest("[data-edit]") || e.target.closest("[data-delete]") || e.target.closest("[data-toggle]")) return;
+        const id = parseInt(el.dataset.effectId);
+        const effect = effects.find((ef) => ef.id === id);
+        if (effect) selectEffect(effect);
+      });
+    });
+
+    container.querySelectorAll("[data-toggle]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.toggle);
+        const currentlyEnabled = btn.dataset.currentlyEnabled === "true";
+        try {
+          await fetch(`/api/transitions/${id}/toggle`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled: !currentlyEnabled }),
+          });
+          loadEffects();
+        } catch (err) {
+          console.error(ts(), "[transitions] toggle error:", err);
+        }
+      });
+    });
+
+    container.querySelectorAll("[data-edit]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.edit);
+        const effect = effects.find((ef) => ef.id === id);
+        if (effect) openModal(effect, effect.isSeed);
+      });
+    });
+
+    container.querySelectorAll("[data-delete]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.delete);
+        if (!confirm("Delete this transition effect?")) return;
+        try {
+          const res = await fetch(`/api/transitions/${id}`, { method: "DELETE" });
+          if (res.status === 403) {
+            alert("Built-in effects cannot be deleted. You can disable them instead.");
+            return;
+          }
+          if (selectedEffect && selectedEffect.id === id) {
+            selectedEffect = null;
+            previewBtn.disabled = true;
+            effectNameLabel.textContent = "";
+          }
+          loadEffects();
+        } catch (err) {
+          console.error(ts(), "[transitions] delete error:", err);
+        }
+      });
+    });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function selectEffect(effect) {
+    selectedEffect = effect;
+    previewBtn.disabled = false;
+    effectNameLabel.textContent = `${effect.name} (${effect.direction.toUpperCase()})`;
+    // Update highlight
+    document.querySelectorAll("[data-effect-id]").forEach((el) => {
+      const isSelected = parseInt(el.dataset.effectId) === effect.id;
+      el.classList.toggle("border-indigo-500", isSelected);
+      el.classList.toggle("bg-gray-800", isSelected);
+    });
+  }
+
+  // ── Preview videos ──
+  async function loadPreviewVideos() {
+    try {
+      const res = await fetch("/api/transitions/preview-videos");
+      previewVideos = await res.json();
+    } catch (err) {
+      console.error(ts(), "[transitions] preview videos error:", err);
+    }
+  }
+
+  // ── Preview playback ──
+  let previewAbort = null;
+
+  async function runPreview() {
+    if (!selectedEffect || !previewVideos) return;
+    if (previewAbort) previewAbort.abort();
+    const ctrl = new AbortController();
+    previewAbort = ctrl;
+
+    const duration = transitionDurationMs || 3000;
+
+    // Reset state
+    placeholder.classList.add("hidden");
+    beforeVid.classList.remove("hidden");
+    transVid.classList.add("hidden");
+    afterVid.classList.add("hidden");
+    beforeVid.classList.remove("transition-active");
+    transVid.classList.remove("transition-active");
+    afterVid.classList.remove("transition-active");
+    previewCss.textContent = "";
+
+    // Load the selected effect's CSS with the duration variable
+    const cssWithVar = `#transition-preview-stage { --transition-duration: ${duration}ms; }\n${selectedEffect.css}`;
+    previewCss.textContent = cssWithVar;
+
+    // Load before video
+    if (previewVideos.before) {
+      beforeVid.src = previewVideos.before;
+      beforeVid.currentTime = 0;
+      try { await beforeVid.play(); } catch (_) {}
+    }
+
+    if (ctrl.signal.aborted) return;
+
+    if (selectedEffect.direction === "in") {
+      // IN transition: show before video → transition video fades IN
+      // Wait 1 second showing "before" video, then play the transition IN
+      await delay(1000, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+
+      // Show transition video and apply the IN animation
+      if (previewVideos.transition) {
+        transVid.src = previewVideos.transition;
+        transVid.currentTime = 0;
+        transVid.classList.remove("hidden");
+        transVid.style.opacity = "0";
+        try { await transVid.play(); } catch (_) {}
+        // Trigger the animation
+        await nextFrame();
+        transVid.style.opacity = "";
+        transVid.classList.add("transition-active");
+      }
+
+      // Wait for animation to finish
+      await delay(duration, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+
+      // Hold on transition video for 1 second
+      await delay(1000, ctrl.signal);
+
+    } else {
+      // OUT transition: show transition video → transition video fades OUT → after video appears
+      // Start with transition video
+      beforeVid.classList.add("hidden");
+      if (previewVideos.transition) {
+        transVid.src = previewVideos.transition;
+        transVid.currentTime = 0;
+        transVid.classList.remove("hidden");
+        try { await transVid.play(); } catch (_) {}
+      }
+
+      // Show after video underneath (behind transition)
+      if (previewVideos.after) {
+        afterVid.src = previewVideos.after;
+        afterVid.currentTime = 0;
+        afterVid.classList.remove("hidden");
+        afterVid.style.zIndex = "0";
+        transVid.style.zIndex = "1";
+        try { await afterVid.play(); } catch (_) {}
+      }
+
+      // Wait 1 second on transition video, then apply OUT animation
+      await delay(1000, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+
+      transVid.classList.add("transition-active");
+
+      // Wait for animation to finish
+      await delay(duration, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+
+      // Hold on after video for 1 second
+      await delay(1000, ctrl.signal);
+    }
+
+    // Clean up
+    if (!ctrl.signal.aborted) {
+      resetPreviewStage();
+    }
+  }
+
+  function resetPreviewStage() {
+    beforeVid.classList.add("hidden");
+    transVid.classList.add("hidden");
+    afterVid.classList.add("hidden");
+    beforeVid.pause();
+    transVid.pause();
+    afterVid.pause();
+    beforeVid.removeAttribute("src");
+    transVid.removeAttribute("src");
+    afterVid.removeAttribute("src");
+    beforeVid.classList.remove("transition-active");
+    transVid.classList.remove("transition-active");
+    afterVid.classList.remove("transition-active");
+    transVid.style.zIndex = "";
+    afterVid.style.zIndex = "";
+    transVid.style.opacity = "";
+    previewCss.textContent = "";
+    placeholder.classList.remove("hidden");
+  }
+
+  function delay(ms, signal) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, ms);
+      if (signal) {
+        signal.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(new DOMException("Aborted", "AbortError"));
+        }, { once: true });
+      }
+    });
+  }
+
+  function nextFrame() {
+    return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }
+
+  // ── Modal ──
+  function openModal(effect, readOnly) {
+    const isView = !!readOnly;
+    modalTitle.textContent = isView ? "View Built-in Effect"
+      : effect ? "Edit Transition Effect"
+      : "Add Transition Effect";
+    inputName.value = effect ? effect.name : "";
+    inputDir.value = effect ? effect.direction : "in";
+    inputCss.value = effect ? effect.css : "";
+    editId.value = effect ? effect.id : "";
+
+    // Toggle read-only state on form fields
+    inputName.disabled = isView;
+    inputDir.disabled = isView;
+    inputCss.readOnly = isView;
+    modalSave.classList.toggle("hidden", isView);
+
+    modal.classList.remove("hidden");
+  }
+
+  function closeModal() {
+    modal.classList.add("hidden");
+    // Reset read-only state for next open
+    inputName.disabled = false;
+    inputDir.disabled = false;
+    inputCss.readOnly = false;
+    modalSave.classList.remove("hidden");
+  }
+
+  async function saveEffect() {
+    const name = inputName.value.trim();
+    const direction = inputDir.value;
+    const css = inputCss.value.trim();
+    if (!name || !css) {
+      alert("Name and CSS are required.");
+      return;
+    }
+    const id = editId.value;
+    const body = JSON.stringify({ name, direction, css });
+    try {
+      if (id) {
+        await fetch(`/api/transitions/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+      } else {
+        await fetch("/api/transitions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+      }
+      closeModal();
+      loadEffects();
+    } catch (err) {
+      console.error(ts(), "[transitions] save error:", err);
+      alert("Failed to save effect.");
+    }
+  }
+
+  // ── Event Bindings ──
+  if (addBtn) addBtn.addEventListener("click", () => openModal(null));
+  if (modalClose) modalClose.addEventListener("click", closeModal);
+  if (modalCancel) modalCancel.addEventListener("click", closeModal);
+  if (modalBackdrop) modalBackdrop.addEventListener("click", closeModal);
+  if (modalSave) modalSave.addEventListener("click", saveEffect);
+  if (previewBtn) previewBtn.addEventListener("click", () => runPreview());
+  if (refreshBtn) refreshBtn.addEventListener("click", () => loadPreviewVideos());
+
+  // ── Init ──
+  loadEffects();
+  loadPreviewVideos();
+
+  // SSE: reload effects when another client changes them
+  const sse = getSSE();
+  const onTransitionsUpdated = () => loadEffects();
+  sse.onTransitionsUpdated(onTransitionsUpdated);
+
+  return () => {
+    if (previewAbort) previewAbort.abort();
+    resetPreviewStage();
+    sse.offTransitionsUpdated(onTransitionsUpdated);
+  };
+}
+
 // ─── Page Init Router ───────────────────────────────────
 
 /**
@@ -2089,6 +2688,8 @@ function initCurrentPage() {
     currentPageCleanup = initLibrary();
   } else if (document.getElementById("player-container")) {
     currentPageCleanup = initPlayer();
+  } else if (document.querySelector('[data-page="transitions"]')) {
+    currentPageCleanup = initTransitions();
   }
 }
 

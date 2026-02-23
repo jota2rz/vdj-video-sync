@@ -2,17 +2,20 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/jota2rz/vdj-video-sync/server/internal/config"
 	"github.com/jota2rz/vdj-video-sync/server/internal/models"
 	"github.com/jota2rz/vdj-video-sync/server/internal/sse"
+	"github.com/jota2rz/vdj-video-sync/server/internal/transitions"
 	"github.com/jota2rz/vdj-video-sync/server/internal/video"
 	"github.com/jota2rz/vdj-video-sync/server/templates/pages"
 )
@@ -23,6 +26,7 @@ type Handlers struct {
 	hub               *sse.Hub
 	matcher           *video.Matcher
 	transitionMatcher *video.Matcher
+	transitions       *transitions.Store
 
 	// Logging state: track last-logged values and times per deck.
 	// Protected by logMu since HandleDeckUpdate, HandleForceVideo, and
@@ -104,12 +108,13 @@ type transitionPoolEntry struct {
 }
 
 // New creates a Handlers instance.
-func New(cfg *config.Config, hub *sse.Hub, matcher *video.Matcher, transitionMatcher *video.Matcher) *Handlers {
+func New(cfg *config.Config, hub *sse.Hub, matcher *video.Matcher, transitionMatcher *video.Matcher, ts *transitions.Store) *Handlers {
 	return &Handlers{
 		cfg:               cfg,
 		hub:               hub,
 		matcher:           matcher,
 		transitionMatcher: transitionMatcher,
+		transitions:       ts,
 		lastLogState:      make(map[int]models.DeckState),
 		lastLogTime:       make(map[int]time.Time),
 		deckCache:         make(map[int][]byte),
@@ -755,10 +760,21 @@ func (h *Handlers) broadcastTransitionPool() {
 func (h *Handlers) playAndRefillTransition() {
 	slot := h.transitionNextSlot
 
-	// Broadcast play command
+	// Pick random enabled "in" and "out" effects
+	var inCSS, outCSS string
+	if fx, err := h.transitions.RandomEnabled("in"); err == nil && fx != nil {
+		inCSS = fx.CSS
+	}
+	if fx, err := h.transitions.RandomEnabled("out"); err == nil && fx != nil {
+		outCSS = fx.CSS
+	}
+
+	// Broadcast play command with CSS effects
 	playPayload := struct {
-		Slot int `json:"slot"`
-	}{Slot: slot}
+		Slot   int    `json:"slot"`
+		InCSS  string `json:"inCSS,omitempty"`
+		OutCSS string `json:"outCSS,omitempty"`
+	}{Slot: slot, InCSS: inCSS, OutCSS: outCSS}
 	playData, _ := json.Marshal(playPayload)
 	h.hub.Broadcast("transition-play", playData)
 
@@ -1033,4 +1049,170 @@ func (h *Handlers) HandleListVideos(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(m.ListAll())
+}
+
+// ── Transitions Page ────────────────────────────────────
+
+// broadcastTransitionsUpdated sends a transitions-updated SSE event to all
+// connected clients so they can refresh their transition effects list.
+func (h *Handlers) broadcastTransitionsUpdated() {
+	data := []byte(`{}`)
+	h.hub.Broadcast("transitions-updated", data)
+}
+
+// HandleTransitions renders the transitions management page.
+// If X-SPA header is set, only the <main> partial is returned.
+func (h *Handlers) HandleTransitions(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if r.Header.Get("X-SPA") != "" {
+		pages.TransitionsContent().Render(r.Context(), w)
+	} else {
+		pages.Transitions().Render(r.Context(), w)
+	}
+}
+
+// ── Transitions API ─────────────────────────────────────
+
+// HandleListTransitions returns all transition effects as JSON.
+// Use ?direction=in or ?direction=out to filter.
+func (h *Handlers) HandleListTransitions(w http.ResponseWriter, r *http.Request) {
+	dir := r.URL.Query().Get("direction")
+	effects, err := h.transitions.List(dir)
+	if err != nil {
+		slog.Error("list transitions", "error", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	if effects == nil {
+		effects = []models.TransitionEffect{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(effects)
+}
+
+// HandleCreateTransition creates a new transition effect.
+func (h *Handlers) HandleCreateTransition(w http.ResponseWriter, r *http.Request) {
+	var req models.TransitionEffect
+	if err := json.NewDecoder(io.LimitReader(r.Body, 8192)).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" || (req.Direction != "in" && req.Direction != "out") || req.CSS == "" {
+		http.Error(w, "name, direction (in/out), and css are required", http.StatusBadRequest)
+		return
+	}
+	effect, err := h.transitions.Create(req.Name, req.Direction, req.CSS)
+	if err != nil {
+		slog.Error("create transition", "error", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	h.broadcastTransitionsUpdated()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(effect)
+}
+
+// HandleUpdateTransition updates an existing transition effect.
+func (h *Handlers) HandleUpdateTransition(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	var req models.TransitionEffect
+	if err := json.NewDecoder(io.LimitReader(r.Body, 8192)).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" || (req.Direction != "in" && req.Direction != "out") || req.CSS == "" {
+		http.Error(w, "name, direction (in/out), and css are required", http.StatusBadRequest)
+		return
+	}
+	if err := h.transitions.Update(id, req.Name, req.Direction, req.CSS); err != nil {
+		slog.Error("update transition", "error", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	h.broadcastTransitionsUpdated()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleToggleTransition toggles the enabled state of a transition effect.
+func (h *Handlers) HandleToggleTransition(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 256)).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if err := h.transitions.SetEnabled(id, body.Enabled); err != nil {
+		slog.Error("toggle transition", "error", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	h.broadcastTransitionsUpdated()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleDeleteTransition deletes a transition effect.
+// Built-in seed effects cannot be deleted (returns 403).
+func (h *Handlers) HandleDeleteTransition(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := h.transitions.Delete(id); err != nil {
+		if errors.Is(err, transitions.ErrSeedProtected) {
+			http.Error(w, "built-in effects cannot be deleted", http.StatusForbidden)
+			return
+		}
+		slog.Error("delete transition", "error", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	h.broadcastTransitionsUpdated()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleRandomPreviewVideos returns 2 random song videos and 1 random transition video for preview.
+func (h *Handlers) HandleRandomPreviewVideos(w http.ResponseWriter, r *http.Request) {
+	songVideos := h.matcher.ListAll()
+	transVideos := h.transitionMatcher.ListAll()
+
+	type previewVideos struct {
+		Before     string `json:"before"`
+		Transition string `json:"transition"`
+		After      string `json:"after"`
+	}
+
+	var result previewVideos
+	if len(songVideos) >= 2 {
+		i := rand.IntN(len(songVideos))
+		j := rand.IntN(len(songVideos))
+		for j == i && len(songVideos) > 1 {
+			j = rand.IntN(len(songVideos))
+		}
+		result.Before = songVideos[i].Path
+		result.After = songVideos[j].Path
+	} else if len(songVideos) == 1 {
+		result.Before = songVideos[0].Path
+		result.After = songVideos[0].Path
+	}
+	if len(transVideos) > 0 {
+		result.Transition = transVideos[rand.IntN(len(transVideos))].Path
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }

@@ -56,6 +56,7 @@ function connectSSE() {
     "analysis-status",
     "library-updated",
     "config-updated",
+    "transitions-updated",
   ];
 
   for (const name of eventNames) {

@@ -18,6 +18,7 @@ import (
 	"github.com/jota2rz/vdj-video-sync/server/internal/db"
 	"github.com/jota2rz/vdj-video-sync/server/internal/handlers"
 	"github.com/jota2rz/vdj-video-sync/server/internal/sse"
+	"github.com/jota2rz/vdj-video-sync/server/internal/transitions"
 	"github.com/jota2rz/vdj-video-sync/server/internal/video"
 )
 
@@ -64,9 +65,12 @@ func main() {
 	tDir := cfg.Get("transition_videos_dir", *transitionVideosDir)
 	transitionMatcher := video.NewMatcher(tDir, "/transition-videos/", bpmCache)
 
+	// ── Transitions Store ─────────────────────────────────
+	transStore := transitions.NewStore(database)
+
 	// ── Routes ──────────────────────────────────────────
 	mux := http.NewServeMux()
-	h := handlers.New(cfg, hub, matcher, transitionMatcher)
+	h := handlers.New(cfg, hub, matcher, transitionMatcher, transStore)
 
 	// API – receives updates from VDJ plugin
 	mux.HandleFunc("POST /api/deck/update", h.HandleDeckUpdate)
@@ -77,6 +81,7 @@ func main() {
 	// Pages
 	mux.HandleFunc("GET /dashboard", h.HandleDashboard)
 	mux.HandleFunc("GET /library", h.HandleLibrary)
+	mux.HandleFunc("GET /transitions", h.HandleTransitions)
 	mux.HandleFunc("GET /player", h.HandlePlayer)
 	mux.HandleFunc("GET /", h.HandleIndex)
 
@@ -87,6 +92,14 @@ func main() {
 	mux.HandleFunc("POST /api/force-video", h.HandleForceVideo)
 	mux.HandleFunc("POST /api/force-deck-video", h.HandleForceDeckVideo)
 	mux.HandleFunc("POST /api/deck/video-ended", h.HandleVideoEnded)
+
+	// Transitions API
+	mux.HandleFunc("GET /api/transitions", h.HandleListTransitions)
+	mux.HandleFunc("POST /api/transitions", h.HandleCreateTransition)
+	mux.HandleFunc("PUT /api/transitions/{id}", h.HandleUpdateTransition)
+	mux.HandleFunc("PATCH /api/transitions/{id}/toggle", h.HandleToggleTransition)
+	mux.HandleFunc("DELETE /api/transitions/{id}", h.HandleDeleteTransition)
+	mux.HandleFunc("GET /api/transitions/preview-videos", h.HandleRandomPreviewVideos)
 
 	// Graceful shutdown channel (created early so /api/shutdown can use it)
 	done := make(chan os.Signal, 1)

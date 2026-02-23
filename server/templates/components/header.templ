@@ -34,6 +34,15 @@ templ Header(activePage string) {
 						Library
 					</a>
 					<a
+						href="/transitions"
+						data-spa-link
+						class={ "px-3 py-2 rounded-md text-sm font-medium",
+							templ.KV("bg-gray-800 text-white", activePage == "transitions"),
+							templ.KV("text-gray-300 hover:bg-gray-700 hover:text-white", activePage != "transitions") }
+					>
+						Transitions
+					</a>
+					<a
 						href="/player"
 						target="_blank"
 						class={ "px-3 py-2 rounded-md text-sm font-medium inline-flex items-center gap-1",

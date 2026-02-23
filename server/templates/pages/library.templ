@@ -15,6 +15,13 @@ templ Library() {
 
 templ LibraryContent() {
 	<main id="spa-content" class="flex-1 flex flex-col p-6 gap-4 overflow-hidden">
+		<!-- Warning: no videos -->
+		<div id="library-warning" class="hidden items-center gap-2 rounded-lg border border-amber-700 bg-amber-900/80 px-4 py-3 text-sm text-amber-200">
+			<svg class="h-5 w-5 shrink-0 text-amber-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+				<path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.499-2.599 4.499H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.004ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clip-rule="evenodd"></path>
+			</svg>
+			<span id="library-warning-text"></span>
+		</div>
 		<div class="flex items-center gap-2 shrink-0">
 			<div class="flex gap-1 bg-gray-800 rounded-lg p-1">
 				<button data-library-tab="song" class="px-3 py-1 rounded text-sm bg-gray-700 text-white">Song Videos</button>

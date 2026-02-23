@@ -13,10 +13,10 @@ Synchronize local video playback with VirtualDJ — a C++ plugin sends real-time
 VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  Browser Clients
         │                               │                    ├─ /dashboard
         │  deck state every 50ms        │                    ├─ /library
-        │  (filename, BPM, pitch,       │                    └─ /player
-        │   volume, elapsed, play/      │
-        │   pause, audible)             └─ SQLite (config & BPM cache)
-        │
+        │  (filename, BPM, pitch,       │                    ├─ /transitions
+        │   volume, elapsed, play/      │                    └─ /player
+        │   pause, audible)             └─ SQLite (config, BPM cache
+        │                                           & transition effects)
         └── VirtualDJ 8 DSP Plugin
 ```
 
@@ -53,6 +53,10 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 - Configurable duration (1-10 seconds) and enable/disable toggle from the control bar
 - Uses `fetch()` + blob URLs to bypass Chrome's 6-media-preload limit
 - Syncs playback rate to the incoming deck's BPM + pitch
+- **CSS transition effects** — animated "in" and "out" effects applied during transitions with a phased timeline (15% in → 70% hold → 15% out)
+- 12 built-in effects: Fade, Dissolve, Flash, Zoom, Iris, Glitch (in/out pairs)
+- Custom effects with full CSS `@keyframes` support
+- Server picks a random enabled effect per direction for each transition
 
 ### Dashboard (`/dashboard`)
 
@@ -71,6 +75,18 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 - "Force Master Video" — force a video on the active deck with transition
 - "Force Deck 1-4" — force a video on a specific deck
 - Auto-refreshes when server detects file changes on disk
+- Warning banners when no song or transition videos are found
+
+### Transition Effects (`/transitions`)
+
+- Browse and manage CSS "in" and "out" transition effects
+- 12 built-in effects (Fade, Dissolve, Flash, Zoom, Iris, Glitch — each with in/out variants)
+- Create custom effects with full CSS `@keyframes` and `.transition-active` class
+- Enable/disable individual effects — server picks randomly from enabled effects
+- Live preview with shuffleable sample videos
+- Built-in effects are read-only and cannot be deleted
+- Warning banner when all effects in a direction are disabled
+- Real-time sync across tabs via SSE
 
 ### Standalone Player (`/player`)
 
@@ -95,7 +111,7 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 - **Plugin → Server**: HTTP POST every 50ms per deck (JSON)
 - **Server → Browser**: Server-Sent Events (SSE) via SharedWorker (single connection shared across all tabs to stay within HTTP/1.1 connection limits)
 - **Cross-tab sync**: BroadcastChannel for instant same-browser config propagation
-- Event types: `deck-update`, `transition-pool`, `transition-play`, `deck-visibility`, `analysis-status`, `library-updated`, `config-updated`
+- Event types: `deck-update`, `transition-pool`, `transition-play`, `deck-visibility`, `analysis-status`, `library-updated`, `config-updated`, `transitions-updated`
 
 ### VDJ Plugin
 
@@ -139,10 +155,11 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 │   │   ├── handlers/           # HTTP & SSE handlers
 │   │   ├── models/             # Shared data types
 │   │   ├── sse/                # Pub/sub hub for Server-Sent Events
+│   │   ├── transitions/        # Transition effects CRUD store
 │   │   └── video/              # Video scanner, matcher, directory watcher
 │   ├── templates/              # Templ templates (.templ → _templ.go)
 │   │   ├── layouts/            # Base HTML layout
-│   │   ├── pages/              # Dashboard, Library, Player
+│   │   ├── pages/              # Dashboard, Library, Player, Transitions
 │   │   └── components/         # Header (nav), ControlBar (bottom)
 │   └── static/
 │       ├── css/                # Tailwind CSS (input.css → output.css)

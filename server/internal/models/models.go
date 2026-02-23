@@ -28,3 +28,13 @@ type ConfigEntry struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
 }
+
+// TransitionEffect represents a CSS transition effect stored in the database.
+type TransitionEffect struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	Direction string `json:"direction"` // "in" or "out"
+	CSS       string `json:"css"`
+	Enabled   bool   `json:"enabled"`
+	IsSeed    bool   `json:"isSeed"`
+}
