@@ -9,6 +9,33 @@
 #include <cstdio>
 #include <chrono>
 #include <sstream>
+#include <cstdlib>
+#include <cctype>
+
+// ── Input validation ───────────────────────────────────
+// Rejects garbage / malicious input from set_var_dialog.
+
+// Accepts IPv4 dotted-decimal, or a hostname (letters, digits, dots, hyphens).
+static bool isValidHost(const char* s) {
+    if (!s || !s[0]) return false;
+    int len = 0;
+    for (const char* p = s; *p; ++p, ++len) {
+        char c = *p;
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '-' || c == ':') continue;
+        return false;  // disallow quotes, spaces, semicolons, etc.
+    }
+    return len > 0 && len < 64;
+}
+
+// Accepts a numeric port string in range 1–65535.
+static bool isValidPort(const char* s) {
+    if (!s || !s[0]) return false;
+    for (const char* p = s; *p; ++p) {
+        if (!std::isdigit(static_cast<unsigned char>(*p))) return false;
+    }
+    long v = std::strtol(s, nullptr, 10);
+    return v >= 1 && v <= 65535;
+}
 
 // ── Locale-safe float-to-string ─────────────────────────
 // Ensures decimal separator is always '.' regardless of system locale.
@@ -165,7 +192,7 @@ void CVideoSyncPlugin::applyVarChanges() {
     bool changed = false;
 
     if (GetStringInfo("get_var $vdjVideoSyncAddr", buf, sizeof(buf)) == S_OK && buf[0]) {
-        if (strcmp(paramIP_, buf) != 0) {
+        if (isValidHost(buf) && strcmp(paramIP_, buf) != 0) {
             strncpy(paramIP_, buf, kParamSize);
             paramIP_[kParamSize - 1] = '\0';
             changed = true;
@@ -174,7 +201,7 @@ void CVideoSyncPlugin::applyVarChanges() {
 
     memset(buf, 0, sizeof(buf));
     if (GetStringInfo("get_var $vdjVideoSyncPort", buf, sizeof(buf)) == S_OK && buf[0]) {
-        if (strcmp(paramPort_, buf) != 0) {
+        if (isValidPort(buf) && strcmp(paramPort_, buf) != 0) {
             strncpy(paramPort_, buf, kParamSize);
             paramPort_[kParamSize - 1] = '\0';
             changed = true;
