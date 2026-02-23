@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   analyze:
-    name: Analyze (${{ matrix.language }})
+    name: Analyze (${{ matrix.language }}${{ matrix.label && format(' – {0}', matrix.label) || '' }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -34,6 +34,11 @@ jobs:
           - language: c-cpp
             os: windows-latest
             build-mode: manual
+            label: Windows
+          - language: c-cpp
+            os: macos-latest
+            build-mode: manual
+            label: macOS
           - language: javascript-typescript
             os: ubuntu-latest
             build-mode: none
@@ -64,29 +69,34 @@ jobs:
         working-directory: server
         run: go build -p 1 -gcflags="github.com/lostromb/concentus/...=-N -l" -o /dev/null ./...
 
-      # ── C++ build (Windows — VDJ SDK requires Win32 types) ──
+      # ── C++ build (VDJ SDK requires Win32/macOS) ──
       - name: Download VirtualDJ SDK
         if: matrix.language == 'c-cpp'
-        shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://www.virtualdj.com/developers/VirtualDJ8_SDK_20211003.zip" -OutFile sdk.zip
-          Expand-Archive sdk.zip -DestinationPath VirtualDJ8_SDK_20211003 -Force
+          curl -fsSL -o sdk.zip "https://www.virtualdj.com/developers/VirtualDJ8_SDK_20211003.zip"
+          unzip -qo sdk.zip -d VirtualDJ8_SDK_20211003
 
       - name: Download cpp-httplib
         if: matrix.language == 'c-cpp'
-        shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.32.0/httplib.h" -OutFile plugin/vendor/httplib.h
+          curl -fsSL -o plugin/vendor/httplib.h "https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.32.0/httplib.h"
 
-      - name: Build C++ plugin (CodeQL traced)
-        if: matrix.language == 'c-cpp'
+      - name: Build C++ plugin – Windows (CodeQL traced)
+        if: matrix.language == 'c-cpp' && runner.os == 'Windows'
         shell: pwsh
         run: |
           cd plugin
           cmake -B build -A x64
           cmake --build build --config Release
 
+      - name: Build C++ plugin – macOS (CodeQL traced)
+        if: matrix.language == 'c-cpp' && runner.os == 'macOS'
+        run: |
+          cd plugin
+          cmake -B build
+          cmake --build build --config Release
+
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:${{ matrix.language }}"
+          category: "/language:${{ matrix.language }}/os:${{ runner.os }}"
