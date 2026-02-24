@@ -137,6 +137,59 @@ func (h *Handlers) BroadcastLibraryUpdated(libraryType string) {
 	data, _ := json.Marshal(map[string]string{"type": libraryType})
 	h.hub.Broadcast("library-updated", data)
 	slog.Info("library updated broadcast", "type", libraryType)
+
+	// If the song library changed, verify the loop video still exists.
+	// If the file was deleted, clear the config so clients stop using
+	// a stale path.
+	if libraryType == "song" {
+		h.checkLoopVideoExists()
+	}
+}
+
+// checkLoopVideoExists verifies that the configured loop_video path still
+// exists in the song video library.  If the file has been deleted, this
+// clears both the loop_video and loop_video_enabled config keys and
+// broadcasts the changes so all clients react.
+func (h *Handlers) checkLoopVideoExists() {
+	loopPath := h.cfg.Get("loop_video", "")
+	if loopPath == "" {
+		return // nothing configured
+	}
+
+	if _, ok := h.matcher.GetByPath(loopPath); ok {
+		return // file still exists
+	}
+
+	slog.Info("loop video no longer in library, clearing config", "path", loopPath)
+
+	// Clear loop_video
+	if err := h.cfg.Set("loop_video", ""); err != nil {
+		slog.Error("failed to clear loop_video config", "error", err)
+		return
+	}
+	payload, _ := json.Marshal(map[string]string{"key": "loop_video", "value": ""})
+	sseMsg := fmt.Appendf(nil, "event: config-updated\ndata: %s\n\n", payload)
+	h.deckCacheMu.Lock()
+	if h.configCache == nil {
+		h.configCache = make(map[string][]byte)
+	}
+	h.configCache["loop_video"] = sseMsg
+	h.deckCacheMu.Unlock()
+	h.hub.Broadcast("config-updated", payload)
+
+	// Also disable loop_video_enabled
+	if h.cfg.Get("loop_video_enabled", "0") == "1" {
+		if err := h.cfg.Set("loop_video_enabled", "0"); err != nil {
+			slog.Error("failed to clear loop_video_enabled config", "error", err)
+			return
+		}
+		payload2, _ := json.Marshal(map[string]string{"key": "loop_video_enabled", "value": "0"})
+		sseMsg2 := fmt.Appendf(nil, "event: config-updated\ndata: %s\n\n", payload2)
+		h.deckCacheMu.Lock()
+		h.configCache["loop_video_enabled"] = sseMsg2
+		h.deckCacheMu.Unlock()
+		h.hub.Broadcast("config-updated", payload2)
+	}
 }
 
 // SetAnalysing updates the analysis flag and broadcasts the status via SSE.

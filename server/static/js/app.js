@@ -81,6 +81,9 @@ function updateSSEStatus(connected) {
 // ─── Configurable transition settings (synced via SSE + BroadcastChannel) ──
 let transitionDurationMs = 3000;
 let transitionsEnabled = true;
+let transitionVideosEnabled = true;
+let loopVideoEnabled = false;
+let loopVideoPath = ""; // path of the chosen loop video
 
 // BroadcastChannel for reliable cross-tab config sync within the same browser.
 // SharedWorker port broadcast may not reach tabs in different browsing context
@@ -815,6 +818,16 @@ function initControlBar() {
   const toggle = document.getElementById("transition-enabled");
   const toggleKnob = toggle ? toggle.querySelector("span") : null;
 
+  // Transition videos toggle
+  const tvToggle = document.getElementById("transition-videos-enabled");
+  const tvToggleKnob = tvToggle ? tvToggle.querySelector("span") : null;
+  const tvLabel = tvToggle ? tvToggle.closest(".flex").querySelector("label") : null;
+
+  // Loop video toggle
+  const lvToggle = document.getElementById("loop-video-enabled");
+  const lvToggleKnob = lvToggle ? lvToggle.querySelector("span") : null;
+  const lvLabel = lvToggle ? lvToggle.closest(".flex").querySelector("label") : null;
+
   function setToggleUI(enabled) {
     if (!toggle) return;
     toggle.setAttribute("aria-checked", enabled ? "true" : "false");
@@ -828,6 +841,82 @@ function initControlBar() {
       toggle.classList.remove("bg-indigo-600");
       toggleKnob.classList.replace("translate-x-4", "translate-x-0") || toggleKnob.classList.add("translate-x-0");
       toggleKnob.classList.remove("translate-x-4");
+    }
+    // Update Transition Videos toggle lock state
+    updateTvToggleLock();
+  }
+
+  function setTvToggleUI(enabled) {
+    if (!tvToggle) return;
+    tvToggle.setAttribute("aria-checked", enabled ? "true" : "false");
+    if (enabled) {
+      tvToggle.classList.replace("bg-gray-600", "bg-indigo-600") || tvToggle.classList.add("bg-indigo-600");
+      tvToggle.classList.remove("bg-gray-600");
+      tvToggleKnob.classList.replace("translate-x-0", "translate-x-4") || tvToggleKnob.classList.add("translate-x-4");
+      tvToggleKnob.classList.remove("translate-x-0");
+    } else {
+      tvToggle.classList.replace("bg-indigo-600", "bg-gray-600") || tvToggle.classList.add("bg-gray-600");
+      tvToggle.classList.remove("bg-indigo-600");
+      tvToggleKnob.classList.replace("translate-x-4", "translate-x-0") || tvToggleKnob.classList.add("translate-x-0");
+      tvToggleKnob.classList.remove("translate-x-4");
+    }
+  }
+
+  /** Lock/unlock the Transition Videos toggle based on Transitions master toggle */
+  function updateTvToggleLock() {
+    if (!tvToggle) return;
+    if (!transitionsEnabled) {
+      tvToggle.classList.add("opacity-40", "cursor-not-allowed");
+      tvToggle.classList.remove("cursor-pointer");
+      if (tvLabel) tvLabel.classList.add("opacity-40");
+    } else {
+      tvToggle.classList.remove("opacity-40", "cursor-not-allowed");
+      tvToggle.classList.add("cursor-pointer");
+      if (tvLabel) tvLabel.classList.remove("opacity-40");
+    }
+  }
+
+  function setLvToggleUI(enabled) {
+    if (!lvToggle) return;
+    lvToggle.setAttribute("aria-checked", enabled ? "true" : "false");
+    if (enabled) {
+      lvToggle.classList.replace("bg-gray-600", "bg-emerald-600") || lvToggle.classList.add("bg-emerald-600");
+      lvToggle.classList.remove("bg-gray-600");
+      lvToggleKnob.classList.replace("translate-x-0", "translate-x-4") || lvToggleKnob.classList.add("translate-x-4");
+      lvToggleKnob.classList.remove("translate-x-0");
+    } else {
+      lvToggle.classList.replace("bg-emerald-600", "bg-gray-600") || lvToggle.classList.add("bg-gray-600");
+      lvToggle.classList.remove("bg-emerald-600");
+      lvToggleKnob.classList.replace("translate-x-4", "translate-x-0") || lvToggleKnob.classList.add("translate-x-0");
+      lvToggleKnob.classList.remove("translate-x-4");
+    }
+  }
+
+  /** Lock/unlock loop video toggle when no loop video is set */
+  function updateLvToggleLock() {
+    if (!lvToggle) return;
+    if (!loopVideoPath) {
+      lvToggle.classList.add("opacity-40", "cursor-not-allowed");
+      lvToggle.classList.remove("cursor-pointer");
+      if (lvLabel) lvLabel.classList.add("opacity-40");
+    } else {
+      lvToggle.classList.remove("opacity-40", "cursor-not-allowed");
+      lvToggle.classList.add("cursor-pointer");
+      if (lvLabel) lvLabel.classList.remove("opacity-40");
+    }
+    updateLvWarning();
+  }
+
+  /** Show/hide the loop video warning banner */
+  function updateLvWarning() {
+    const warning = document.getElementById("loop-video-warning");
+    if (!warning) return;
+    if (loopVideoEnabled && !loopVideoPath) {
+      warning.classList.remove("hidden");
+      warning.classList.add("flex");
+    } else {
+      warning.classList.add("hidden");
+      warning.classList.remove("flex");
     }
   }
 
@@ -846,6 +935,39 @@ function initControlBar() {
     });
   }
 
+  if (tvToggle) {
+    tvToggle.addEventListener("click", () => {
+      // Locked when transitions are disabled
+      if (!transitionsEnabled) return;
+      transitionVideosEnabled = !transitionVideosEnabled;
+      setTvToggleUI(transitionVideosEnabled);
+      const val = transitionVideosEnabled ? "1" : "0";
+      if (configBC) configBC.postMessage({ key: "transition_videos_enabled", value: val });
+      fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "transition_videos_enabled", value: val }),
+      }).catch((err) => console.error(ts(), "[controlbar] save error:", err));
+    });
+  }
+
+  if (lvToggle) {
+    lvToggle.addEventListener("click", () => {
+      // Locked when no loop video is configured
+      if (!loopVideoPath) return;
+      loopVideoEnabled = !loopVideoEnabled;
+      setLvToggleUI(loopVideoEnabled);
+      updateLvWarning();
+      const val = loopVideoEnabled ? "1" : "0";
+      if (configBC) configBC.postMessage({ key: "loop_video_enabled", value: val });
+      fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "loop_video_enabled", value: val }),
+      }).catch((err) => console.error(ts(), "[controlbar] save error:", err));
+    });
+  }
+
   // Load initial values from config
   fetch("/api/config")
     .then((r) => r.json())
@@ -860,6 +982,13 @@ function initControlBar() {
       }
       transitionsEnabled = cfg.transition_enabled !== "0";
       setToggleUI(transitionsEnabled);
+      transitionVideosEnabled = cfg.transition_videos_enabled !== "0";
+      setTvToggleUI(transitionVideosEnabled);
+      updateTvToggleLock();
+      loopVideoPath = cfg.loop_video || "";
+      loopVideoEnabled = cfg.loop_video_enabled === "1" && !!loopVideoPath;
+      setLvToggleUI(loopVideoEnabled);
+      updateLvToggleLock();
     })
     .catch(() => {
       input.value = 3;
@@ -906,6 +1035,23 @@ function initControlBar() {
     } else if (data.key === "transition_enabled") {
       transitionsEnabled = data.value !== "0";
       setToggleUI(transitionsEnabled);
+    } else if (data.key === "transition_videos_enabled") {
+      transitionVideosEnabled = data.value !== "0";
+      setTvToggleUI(transitionVideosEnabled);
+      updateTvToggleLock();
+    } else if (data.key === "loop_video") {
+      loopVideoPath = data.value || "";
+      updateLvToggleLock();
+      // If loop video was removed while enabled, disable it
+      if (!loopVideoPath && loopVideoEnabled) {
+        loopVideoEnabled = false;
+        setLvToggleUI(false);
+      }
+      updateLvWarning();
+    } else if (data.key === "loop_video_enabled") {
+      loopVideoEnabled = data.value === "1" && !!loopVideoPath;
+      setLvToggleUI(loopVideoEnabled);
+      updateLvWarning();
     }
   };
   sse.onConfig(onConfigUpdate);
@@ -1011,14 +1157,29 @@ function initLibrary() {
   let activeLibraryTab = "song";
 
   const forceBtn = document.getElementById("force-video-btn");
+  const loopBtn = document.getElementById("set-loop-video-btn");
 
-  /** Show/hide the force button based on active tab */
+  /** Show/hide the force and loop buttons based on active tab */
   function updateForceButton() {
     if (!forceBtn) return;
     const deckBtns = document.getElementById("force-deck-btns");
     if (activeLibraryTab === "song") {
       forceBtn.classList.remove("hidden");
       forceBtn.disabled = !forceBtn.dataset.path;
+      if (loopBtn) {
+        loopBtn.classList.remove("hidden");
+        loopBtn.disabled = !forceBtn.dataset.path;
+        // Update button text based on whether selected video is already the loop video
+        if (forceBtn.dataset.path && forceBtn.dataset.path === loopVideoPath) {
+          loopBtn.textContent = "Unset Loop Video";
+          loopBtn.classList.remove("bg-emerald-600", "hover:bg-emerald-500");
+          loopBtn.classList.add("bg-red-600", "hover:bg-red-500");
+        } else {
+          loopBtn.textContent = "Set Loop Video";
+          loopBtn.classList.remove("bg-red-600", "hover:bg-red-500");
+          loopBtn.classList.add("bg-emerald-600", "hover:bg-emerald-500");
+        }
+      }
       if (deckBtns) {
         deckBtns.classList.remove("hidden");
         deckBtns.querySelectorAll("[data-force-deck]").forEach((btn) => {
@@ -1027,6 +1188,7 @@ function initLibrary() {
       }
     } else {
       forceBtn.classList.add("hidden");
+      if (loopBtn) loopBtn.classList.add("hidden");
       if (deckBtns) deckBtns.classList.add("hidden");
     }
   }
@@ -1140,6 +1302,41 @@ function initLibrary() {
     });
   }
 
+  // Set Loop Video button handler
+  if (loopBtn) {
+    loopBtn.addEventListener("click", () => {
+      const path = forceBtn?.dataset.path;
+      if (!path) return;
+      loopBtn.disabled = true;
+
+      // Toggle: if clicked video is already the loop, unset it
+      const newLoopPath = path === loopVideoPath ? "" : path;
+      loopVideoPath = newLoopPath;
+
+      // Save to config
+      if (configBC) configBC.postMessage({ key: "loop_video", value: newLoopPath });
+      fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "loop_video", value: newLoopPath }),
+      })
+        .then(() => {
+          console.log(ts(), "[library] loop video set:", newLoopPath || "(none)");
+          loopBtn.textContent = newLoopPath ? "Loop Set!" : "Loop Unset!";
+          setTimeout(() => {
+            updateForceButton();
+            loopBtn.disabled = false;
+          }, 1000);
+          // Refresh list to show/hide loop icon
+          loadVideoList(activeLibraryTab);
+        })
+        .catch((err) => {
+          console.error(ts(), "[library] set loop video error:", err.message);
+          loopBtn.disabled = false;
+        });
+    });
+  }
+
   // Show force button on initial tab
   updateForceButton();
 
@@ -1233,15 +1430,21 @@ function loadVideoList(type = "song") {
         return;
       }
 
+      const loopIconSvg = `<svg class="h-4 w-4 shrink-0 text-emerald-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" title="Loop Video"><path d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.451a.75.75 0 0 0 0-1.5H4.5a.75.75 0 0 0-.75.75v3.75a.75.75 0 0 0 1.5 0v-2.033a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-11.073-3.85a.75.75 0 0 0 1.45.388 5.5 5.5 0 0 1 9.2-2.465l.312.31H12.75a.75.75 0 0 0 0 1.501H16.5a.75.75 0 0 0 .75-.75V2.757a.75.75 0 0 0-1.5 0v2.033A7 7 0 0 0 4.039 7.924l.2-.35Z"/></svg>`;
+
       container.innerHTML = videos
         .map(
-          (v) => `
+          (v) => {
+            const isLoop = type === "song" && v.path === loopVideoPath;
+            return `
           <div class="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-800 transition-colors" data-video-name="${escapeHtml(v.name)}" data-video-path="${escapeHtml(v.path)}">
             <div class="min-w-0">
               <p class="text-sm text-gray-200 truncate">${escapeHtml(stripExt(v.name))}</p>
               ${v.bpm ? `<span class="text-xs text-gray-500">${v.bpm} BPM</span>` : ""}
             </div>
-          </div>`
+            ${isLoop ? loopIconSvg : ""}
+          </div>`;
+          }
         )
         .join("");
 
@@ -1283,6 +1486,20 @@ function previewVideo(path, name) {
     forceBtn.dataset.path = path;
     if (!forceBtn.classList.contains("hidden")) {
       forceBtn.disabled = false;
+    }
+    // Also enable loop button and update its state
+    const loopBtn = document.getElementById("set-loop-video-btn");
+    if (loopBtn && !loopBtn.classList.contains("hidden")) {
+      loopBtn.disabled = false;
+      if (path === loopVideoPath) {
+        loopBtn.textContent = "Unset Loop Video";
+        loopBtn.classList.remove("bg-emerald-600", "hover:bg-emerald-500");
+        loopBtn.classList.add("bg-red-600", "hover:bg-red-500");
+      } else {
+        loopBtn.textContent = "Set Loop Video";
+        loopBtn.classList.remove("bg-red-600", "hover:bg-red-500");
+        loopBtn.classList.add("bg-emerald-600", "hover:bg-emerald-500");
+      }
     }
     // Also enable per-deck force buttons
     const deckBtns = document.getElementById("force-deck-btns");
@@ -1391,6 +1608,11 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
   let activeDeck = null;
   /** Decks awaiting a server-driven video switch after video-ended (levels 2+) */
   const pendingEndedSwitch = new Set();
+
+  // ── Loop video system ──
+  let loopVideoEl = null; // <video> element for the loop video
+  let loopVideoActive = false; // true when loop video is currently visible
+  let loopVideoLoadedPath = ""; // currently loaded loop video path
 
   // ── Transition system ──
   //
@@ -1584,6 +1806,18 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
       swapFn();
       return;
     }
+
+    // Transition videos disabled — run CSS effects only (no video overlay)
+    if (!transitionVideosEnabled) {
+      if (transitionInProgress) {
+        queuedTransition = { newDeck, swapFn };
+        console.log(ts(), `[player] effects-only transition queued (deck ${newDeck})`);
+        return;
+      }
+      executeEffectsOnly(newDeck, swapFn);
+      return;
+    }
+
     if (transitionInProgress) {
       // Queue this request — latest wins.  Don't swap decks now because
       // the transition video may be semi-transparent ("out" phase).
@@ -1797,6 +2031,92 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
     }
   }
 
+  /**
+   * Effects-only transition: no transition video overlay.
+   * Applies only the "in" CSS effect to the container as the deck swaps.
+   * Used when transition videos are disabled but transitions are enabled.
+   */
+  function executeEffectsOnly(newDeck, swapFn) {
+    transitionInProgress = true;
+    pendingPlaySlot = null;
+
+    pendingInCSS = ""; // discard — no "in" phase for effects-only
+    const outCSS = pendingOutCSS;
+    pendingOutCSS = "";
+
+    const hasOut = !!outCSS;
+    const outMs = hasOut ? transitionDurationMs : 0;
+    const outSec = (outMs / 1000).toFixed(2);
+
+    if (onTransitionChange) onTransitionChange({ inProgress: true, rate: 0 });
+
+    // Old deck stays on top; new deck plays behind it.
+    // NOTE: activeDeck may already be updated to newDeck by updatePriority(),
+    // so we find the old deck from the DOM — it's the currently-visible deck
+    // that isn't the new one.
+    let oldDeckVideo = null;
+    for (const [dStr, vEl] of Object.entries(deckVideos)) {
+      if (Number(dStr) !== newDeck && vEl.style.visibility === "visible") {
+        oldDeckVideo = vEl;
+        break;
+      }
+    }
+    const newDeckVideo = deckVideos[newDeck];
+
+    console.log(ts(), `[player] effects-only transition (deck ${newDeck}, oldDeck=${oldDeckVideo?.id || 'none'}, out=${outSec}s)`);
+
+    let cleaned = false;
+    function cleanup() {
+      if (cleaned) return;
+      cleaned = true;
+      if (oldDeckVideo) oldDeckVideo.classList.remove("transition-active");
+      const oldFx = document.getElementById("transition-live-fx");
+      if (oldFx) oldFx.remove();
+      // Finalize the swap now that the effect has completed
+      swapFn();
+      transitionInProgress = false;
+      if (onTransitionChange) onTransitionChange({ inProgress: false, rate: 0 });
+      applyDeferredPool();
+      if (queuedTransition) {
+        const q = queuedTransition;
+        queuedTransition = null;
+        console.log(ts(), `[player] draining queued transition (deck ${q.newDeck})`);
+        playTransition(q.newDeck, q.swapFn);
+      }
+    }
+
+    if (hasOut && oldDeckVideo) {
+      // Make new deck visible behind old deck (z=0 < old deck z=10)
+      if (newDeckVideo) {
+        newDeckVideo.style.zIndex = "0";
+        newDeckVideo.style.visibility = "visible";
+      }
+
+      // Apply "out" CSS effect to old deck — it fades/dissolves away
+      // revealing the new deck underneath
+      const fxStyle = document.createElement("style");
+      fxStyle.id = "transition-live-fx";
+      document.head.appendChild(fxStyle);
+      fxStyle.textContent = outCSS.replace(/var\(--transition-duration\)/g, `${outSec}s`);
+      void oldDeckVideo.offsetWidth; // force reflow
+      oldDeckVideo.classList.add("transition-active");
+
+      const onOutEnd = () => {
+        oldDeckVideo.removeEventListener("animationend", onOutEnd);
+        cleanup();
+      };
+      oldDeckVideo.addEventListener("animationend", onOutEnd);
+      // Safety timeout
+      setTimeout(() => {
+        oldDeckVideo.removeEventListener("animationend", onOutEnd);
+        cleanup();
+      }, outMs + 500);
+    } else {
+      // No effect — swap immediately
+      cleanup();
+    }
+  }
+
   // ── Helpers ──
 
   /** Get or create a <video> element for a given deck number */
@@ -1923,6 +2243,158 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
     }
   }
 
+  // ── Loop Video ──
+
+  /** Get or create the dedicated loop video element */
+  function getLoopVideoEl() {
+    if (loopVideoEl) return loopVideoEl;
+    const v = document.createElement("video");
+    v.id = "loop-video";
+    v.muted = true;
+    v.setAttribute("muted", "");
+    v.autoplay = false;
+    v.playsInline = true;
+    v.disablePictureInPicture = true;
+    v.loop = true;
+    v.style.cssText =
+      "position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:black;";
+    v.style.zIndex = "15"; // above decks (z=10), below transitions (z=20)
+    v.style.visibility = "hidden";
+    container.appendChild(v);
+    loopVideoEl = v;
+    return v;
+  }
+
+  /** Show loop video with a transition */
+  function activateLoopVideo() {
+    if (loopVideoActive) return;
+    if (!loopVideoPath) return;
+    loopVideoActive = true;
+
+    const lv = getLoopVideoEl();
+
+    // Load the video if not already loaded
+    if (loopVideoLoadedPath !== loopVideoPath) {
+      lv.src = loopVideoPath;
+      lv.load();
+      loopVideoLoadedPath = loopVideoPath;
+    }
+
+    console.log(ts(), "[player] activating loop video:", loopVideoPath);
+
+    // Play it
+    lv.currentTime = 0;
+    lv.play().catch(() => {});
+
+    // Use transition if enabled
+    if (transitionsEnabled) {
+      // The loop video appears on top via the "in" transition effect
+      pendingInCSS = "";
+      pendingOutCSS = "";
+      // Fetch a random "in" CSS effect
+      fetch("/api/transitions?direction=in")
+        .then((r) => r.json())
+        .then((effects) => {
+          const enabled = effects.filter((e) => e.enabled);
+          if (enabled.length > 0) {
+            const fx = enabled[Math.floor(Math.random() * enabled.length)];
+            const durSec = (transitionDurationMs / 1000).toFixed(2);
+            const css = fx.css.replace(/var\(--transition-duration\)/g, `${durSec}s`);
+            const fxStyle = document.createElement("style");
+            fxStyle.id = "loop-video-fx";
+            document.head.appendChild(fxStyle);
+            fxStyle.textContent = css;
+            void lv.offsetWidth;
+            lv.style.visibility = "visible";
+            lv.classList.add("transition-active");
+            const onEnd = () => {
+              lv.removeEventListener("animationend", onEnd);
+              lv.classList.remove("transition-active");
+              fxStyle.remove();
+            };
+            lv.addEventListener("animationend", onEnd);
+            setTimeout(() => {
+              lv.removeEventListener("animationend", onEnd);
+              lv.classList.remove("transition-active");
+              fxStyle.remove();
+            }, transitionDurationMs + 500);
+          } else {
+            lv.style.visibility = "visible";
+          }
+        })
+        .catch(() => {
+          lv.style.visibility = "visible";
+        });
+    } else {
+      lv.style.visibility = "visible";
+    }
+    if (noVideo) noVideo.classList.add("hidden");
+  }
+
+  /** Hide loop video with a transition */
+  function deactivateLoopVideo() {
+    if (!loopVideoActive) return;
+    loopVideoActive = false;
+    const lv = loopVideoEl;
+    if (!lv) return;
+
+    console.log(ts(), "[player] deactivating loop video");
+
+    if (transitionsEnabled) {
+      // Use "out" effect on the loop video
+      fetch("/api/transitions?direction=out")
+        .then((r) => r.json())
+        .then((effects) => {
+          const enabled = effects.filter((e) => e.enabled);
+          if (enabled.length > 0) {
+            const fx = enabled[Math.floor(Math.random() * enabled.length)];
+            const durSec = (transitionDurationMs / 1000).toFixed(2);
+            const css = fx.css.replace(/var\(--transition-duration\)/g, `${durSec}s`);
+            const fxStyle = document.createElement("style");
+            fxStyle.id = "loop-video-fx";
+            document.head.appendChild(fxStyle);
+            fxStyle.textContent = css;
+            void lv.offsetWidth;
+            lv.classList.add("transition-active");
+            const onEnd = () => {
+              lv.removeEventListener("animationend", onEnd);
+              lv.classList.remove("transition-active");
+              fxStyle.remove();
+              lv.style.visibility = "hidden";
+              lv.pause();
+            };
+            lv.addEventListener("animationend", onEnd);
+            setTimeout(() => {
+              lv.removeEventListener("animationend", onEnd);
+              lv.classList.remove("transition-active");
+              fxStyle.remove();
+              lv.style.visibility = "hidden";
+              lv.pause();
+            }, transitionDurationMs + 500);
+          } else {
+            lv.style.visibility = "hidden";
+            lv.pause();
+          }
+        })
+        .catch(() => {
+          lv.style.visibility = "hidden";
+          lv.pause();
+        });
+    } else {
+      lv.style.visibility = "hidden";
+      lv.pause();
+    }
+  }
+
+  /** React to loop_video_enabled config changes */
+  function checkLoopVideoState() {
+    if (loopVideoEnabled && loopVideoPath) {
+      activateLoopVideo();
+    } else {
+      deactivateLoopVideo();
+    }
+  }
+
   /**
    * Determine which deck should be the master and update z-indices.
    *
@@ -1932,6 +2404,8 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
    * Rule 2: If the master changes for any reason, play a transition.
    */
   function updatePriority() {
+    // When loop video is active, deck priority still updates internally
+    // but doesn't trigger transitions — the loop video stays on top.
     let bestDeck = null;
     let bestVolume = -1;
 
@@ -1972,8 +2446,14 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
 
     console.log(ts(), `[player] active deck change: ${activeDeck} → ${bestDeck}`);
 
-    // Deck-to-deck switch → play transition
+    // Deck-to-deck switch → play transition (but not when loop video covers everything)
     if (bestDeck !== null && activeDeck !== null) {
+      if (loopVideoActive) {
+        // Loop video is on top — just swap silently underneath
+        console.log(ts(), `[player] deck-to-deck swap (silent — loop video active)`);
+        applyDeckSwap(bestDeck);
+        return;
+      }
       console.log(ts(), `[player] deck-to-deck switch: playing transition`);
       // Update activeDeck immediately to prevent updatePriority re-entry
       // while we're waiting for the transition to complete.
@@ -2159,11 +2639,39 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
     }
   }, 100);
 
+  // ── Loop video config listener ──
+  const onLoopConfigUpdate = (data) => {
+    if (data.key === "loop_video_enabled" || data.key === "loop_video") {
+      // Global vars are already updated by the global applyConfig handler.
+      // Just react to the state change here.
+      checkLoopVideoState();
+    }
+  };
+  sse.onConfig(onLoopConfigUpdate);
+
+  // Also listen on BroadcastChannel (same-browser cross-tab)
+  let prevBcHandler = null;
+  if (configBC) {
+    prevBcHandler = configBC.onmessage;
+    configBC.onmessage = (e) => {
+      if (prevBcHandler) prevBcHandler(e);
+      if (e.data.key === "loop_video_enabled" || e.data.key === "loop_video") {
+        checkLoopVideoState();
+      }
+    };
+  }
+
+  // Activate loop video if it was already enabled on page load
+  if (loopVideoEnabled && loopVideoPath) {
+    activateLoopVideo();
+  }
+
   // ── Return cleanup function ──
   return () => {
     sse.offUpdate(onDeckUpdate);
     sse.offTransitionPool(onTransitionPool);
     sse.offTransitionPlay(onTransitionPlay);
+    sse.offConfig(onLoopConfigUpdate);
     clearInterval(safetyInterval);
     // Destroy created video elements
     for (const videoEl of Object.values(deckVideos)) {
@@ -2176,6 +2684,15 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
       buf.video.pause();
       buf.video.removeAttribute("src");
       buf.video.remove();
+    }
+    // Destroy loop video
+    if (loopVideoEl) {
+      loopVideoEl.pause();
+      loopVideoEl.removeAttribute("src");
+      loopVideoEl.remove();
+      loopVideoEl = null;
+      loopVideoActive = false;
+      loopVideoLoadedPath = "";
     }
   };
 }
@@ -2660,6 +3177,13 @@ function initCurrentPage() {
         if (val >= 1 && val <= 10) transitionDurationMs = val * 1000;
       } else if (key === "transition_enabled") {
         transitionsEnabled = value !== "0";
+      } else if (key === "transition_videos_enabled") {
+        transitionVideosEnabled = value !== "0";
+      } else if (key === "loop_video") {
+        loopVideoPath = value || "";
+        if (!loopVideoPath && loopVideoEnabled) loopVideoEnabled = false;
+      } else if (key === "loop_video_enabled") {
+        loopVideoEnabled = value === "1" && !!loopVideoPath;
       }
     }
 
@@ -2678,6 +3202,9 @@ function initCurrentPage() {
         const dur = parseInt(cfg.transition_duration, 10);
         if (dur >= 1 && dur <= 10) transitionDurationMs = dur * 1000;
         transitionsEnabled = cfg.transition_enabled !== "0";
+        transitionVideosEnabled = cfg.transition_videos_enabled !== "0";
+        loopVideoPath = cfg.loop_video || "";
+        loopVideoEnabled = cfg.loop_video_enabled === "1" && !!loopVideoPath;
       })
       .catch(() => {});
   }

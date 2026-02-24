@@ -67,11 +67,23 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 - Deck limit warning banner (decks > 4)
 - BPM analysis overlay with progress indicator
 
+### Loop Video
+
+- Designate any song video as the "Loop Video" from the Library page
+- "Use Loop Video" toggle in the control bar activates the loop video on top of all deck videos
+- Loop video plays indefinitely until the toggle is disabled
+- Transitions in/out with random CSS effects (when transitions are enabled)
+- Deck switches happen silently underneath when loop video is active
+- Loop icon indicator (Heroicons) shown next to the designated video in the song list
+- Auto-cleared if the loop video file is deleted from disk
+- Warning banner when the toggle is enabled but no loop video is selected
+
 ### Video Library (`/library`)
 
 - Tabbed browser: Song Videos / Transition Videos
 - Search filter
 - Video preview with click-to-pause
+- "Set Loop Video" — designate a song video as the loop video (emerald button)
 - "Force Master Video" — force a video on the active deck with transition
 - "Force Deck 1-4" — force a video on a specific deck
 - Auto-refreshes when server detects file changes on disk
@@ -96,8 +108,11 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 
 ### Control Bar
 
-- Transition enabled/disabled toggle
-- Transition duration ± buttons (1-10 seconds)
+- **Transitions** enabled/disabled toggle
+- **Transition Videos** toggle — when off, deck switches use CSS effects only (no video overlay); the old deck's "out" effect plays while the new deck is revealed underneath
+- **Transition Duration** ± buttons (1-10 seconds)
+- **Use Loop Video** toggle — when on, plays the designated loop video on top of all deck content; dimmed/locked when no loop video is set
+- Warning banner when loop video is enabled with no video selected
 - Config changes sync across all tabs via BroadcastChannel + SSE
 
 ### Settings & Config
@@ -111,6 +126,7 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 - **Plugin → Server**: HTTP POST every 50ms per deck (JSON)
 - **Server → Browser**: Server-Sent Events (SSE) via SharedWorker (single connection shared across all tabs to stay within HTTP/1.1 connection limits)
 - **Cross-tab sync**: BroadcastChannel for instant same-browser config propagation
+- **Loop video cleanup**: server auto-clears loop video config when the file is deleted from disk
 - Event types: `deck-update`, `transition-pool`, `transition-play`, `deck-visibility`, `analysis-status`, `library-updated`, `config-updated`, `transitions-updated`
 
 ### VDJ Plugin
