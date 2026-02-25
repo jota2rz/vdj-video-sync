@@ -477,7 +477,7 @@ func (m *Matcher) Match(songFilename string, deckBPM float64) (models.VideoFile,
 			if len(candidates) < top {
 				top = len(candidates)
 			}
-			pick := rand.IntN(top)
+			pick := stableIndex(songLower, top)
 			v := candidates[pick].ix.file
 			v.MatchLevel = MatchBPMFuzzy
 			v.MatchType = "bpm-fuzzy"
@@ -511,7 +511,7 @@ func (m *Matcher) Match(songFilename string, deckBPM float64) (models.VideoFile,
 			if len(candidates) < top {
 				top = len(candidates)
 			}
-			pick := rand.IntN(top)
+			pick := stableIndex(songLower, top)
 			v := candidates[pick].ix.file
 			v.MatchLevel = MatchBPM
 			v.MatchType = "bpm"

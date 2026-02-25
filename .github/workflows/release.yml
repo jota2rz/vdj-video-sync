@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release with Changelog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        env:
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Find the previous version tag
+          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | sed -n '2p')
+
+          {
+            echo "## Changelog"
+            echo ""
+            if [ -z "$PREV_TAG" ]; then
+              git log --format="* [\`%h\`](https://github.com/${REPO}/commit/%H) %s" "${TAG}"
+            else
+              git log --format="* [\`%h\`](https://github.com/${REPO}/commit/%H) %s" "${PREV_TAG}..${TAG}"
+            fi
+          } > changelog.md
+
+          echo "--- Generated changelog ---"
+          cat changelog.md
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Create the release; if a build workflow already created it, edit instead
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --notes-file changelog.md \
+            --latest \
+          || gh release edit "${TAG}" \
+            --notes-file changelog.md
