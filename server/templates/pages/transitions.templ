@@ -52,17 +52,19 @@ templ TransitionsContent() {
 				</div>
 			</div>
 			<!-- Right: Preview Area -->
-			<div class="w-1/2 flex flex-col gap-3 min-w-0">
-				<div id="transition-preview-stage" class="relative aspect-video bg-black rounded-lg overflow-hidden">
-					<video id="preview-before" class="absolute inset-0 w-full h-full object-contain" muted playsinline></video>
-					<video id="preview-transition" class="absolute inset-0 w-full h-full object-contain hidden" muted playsinline></video>
-					<video id="preview-after" class="absolute inset-0 w-full h-full object-contain hidden" muted playsinline></video>
-					<div id="preview-stage-placeholder" class="absolute inset-0 flex items-center justify-center text-gray-600 text-sm">
-						Select an effect and click Preview
+			<div class="w-1/2 flex flex-col gap-3 min-w-0 min-h-0">
+				<div class="flex-1 min-h-0">
+					<div id="transition-preview-stage" class="relative bg-black rounded-lg overflow-hidden mx-auto" data-aspect-ratio style="aspect-ratio:16/9;">
+						<video id="preview-before" class="absolute inset-0 w-full h-full object-contain" muted playsinline></video>
+						<video id="preview-transition" class="absolute inset-0 w-full h-full object-contain hidden" muted playsinline></video>
+						<video id="preview-after" class="absolute inset-0 w-full h-full object-contain hidden" muted playsinline></video>
+						<div id="preview-stage-placeholder" class="absolute inset-0 flex items-center justify-center text-gray-600 text-sm">
+							Select an effect and click Preview
+						</div>
 					</div>
 				</div>
 				<style id="transition-preview-css"></style>
-				<div class="flex items-center gap-2">
+				<div class="shrink-0 flex items-center gap-2">
 					<button
 						id="preview-transition-btn"
 						disabled
@@ -84,7 +86,7 @@ templ TransitionsContent() {
 						Shuffle Videos
 					</button>
 				</div>
-				<p id="preview-effect-name" class="text-sm text-gray-400 text-center"></p>
+				<p id="preview-effect-name" class="shrink-0 text-sm text-gray-400 text-center h-5">&nbsp;</p>
 			</div>
 		</div>
 

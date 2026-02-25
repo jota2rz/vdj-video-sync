@@ -25,6 +25,8 @@ const cache = {
   analysis: null,
   /** @type {Record<string, string>} config key → last JSON string */
   config: {},
+  /** @type {string|null} last overlay-updated JSON */
+  overlay: null,
 };
 
 /** Send a message to all connected ports */
@@ -57,6 +59,8 @@ function connectSSE() {
     "library-updated",
     "config-updated",
     "transitions-updated",
+    "overlay-updated",
+    "loop-video-transition",
   ];
 
   for (const name of eventNames) {
@@ -81,6 +85,8 @@ function connectSSE() {
           const d = JSON.parse(e.data);
           cache.config[d.key] = e.data;
         } catch (_) {}
+      } else if (name === "overlay-updated") {
+        cache.overlay = e.data;
       }
 
       broadcast({ type: "event", name, data: e.data });
@@ -104,6 +110,9 @@ function replayTo(port) {
   }
   for (const data of Object.values(cache.config)) {
     port.postMessage({ type: "event", name: "config-updated", data });
+  }
+  if (cache.overlay) {
+    port.postMessage({ type: "event", name: "overlay-updated", data: cache.overlay });
   }
 }
 

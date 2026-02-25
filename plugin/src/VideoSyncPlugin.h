@@ -30,6 +30,9 @@ struct DeckState {
     double      bpm         = 0.0;    // get_bpm: current deck BPM
     std::string filename;             // get_filename: song filename (no path)
     double      pitch       = 100.0;  // get_pitch_value: pitch %, centered on 100%, used for video playbackRate
+    int         totalTimeMs = 0;      // get_songlength * 1000: total song length in ms
+    std::string title;                // get_title: song title metadata
+    std::string artist;               // get_artist: song artist metadata
 
     bool operator==(const DeckState& o) const;
     bool operator!=(const DeckState& o) const { return !(*this == o); }

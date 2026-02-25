@@ -58,21 +58,36 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 - Custom effects with full CSS `@keyframes` support
 - Server picks a random enabled effect per direction for each transition
 
+### Overlay System
+
+- Customizable CSS/JS overlay elements rendered on top of or behind video transitions
+- 5 built-in seed elements: **BPM**, **Song Name**, **Artist**, **Progress Bar**, **Custom Logo**
+- Two z-index layers: elements can be configured to show **above transitions** (z=100) or **behind transitions** (z=16)
+- **Show Over Transition** — per-element toggle; behind-layer elements defer updates until the transition's "in" effect finishes
+- **Custom Logo** — upload a PNG logo with a default highlight sweep CSS animation (fully customizable via the overlay CSS editor)
+- **Data-driven visibility** — elements automatically fade in when data is available and fade out when empty (e.g., BPM hides when no BPM data, song name hides when no track is loaded)
+- **No audible deck** — all overlay elements fade out when no deck is audible and playing
+- Each element has editable CSS and JavaScript; HTML is read-only
+- Full CRUD overlay management API with SSE broadcast on changes
+- Overlay modal with live editing (HTML above CSS for quick reference)
+
 ### Dashboard (`/dashboard`)
 
 - Real-time deck status cards (decks 1-2 always shown, 3-4 appear/hide dynamically)
+- Deck cards show **Song Name – Artist** and **elapsed / total time** (MM:SS)
 - Embedded master video player with match type, playback rate, and BPM info
 - Canvas-mirrored per-deck video previews (~15 fps)
 - Active deck pulse animation
 - Deck limit warning banner (decks > 4)
 - BPM analysis overlay with progress indicator
+- Auto-scaling player and deck previews
 
 ### Loop Video
 
 - Designate any song video as the "Loop Video" from the Library page
 - "Use Loop Video" toggle in the control bar activates the loop video on top of all deck videos
 - Loop video plays indefinitely until the toggle is disabled
-- Transitions in/out with random CSS effects (when transitions are enabled)
+- **Server-synced transitions** — server picks the CSS effect and broadcasts it to all clients, so every browser shows the same transition animation
 - Deck switches happen silently underneath when loop video is active
 - Loop icon indicator (Heroicons) shown next to the designated video in the song list
 - Auto-cleared if the loop video file is deleted from disk
@@ -103,7 +118,9 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 ### Standalone Player (`/player`)
 
 - Fullscreen video output (opens in new tab, no UI)
-- Same transition and sync logic as the embedded dashboard player
+- Same transition, sync, and overlay logic as the embedded dashboard player
+- Configurable **aspect ratio** from the settings modal (default 16:9)
+- Responsive sizing: constrains to viewport in both landscape and portrait orientations
 - "Waiting for track..." fallback when no video is matched
 
 ### Control Bar
@@ -112,12 +129,14 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 - **Transition Videos** toggle — when off, deck switches use CSS effects only (no video overlay); the old deck's "out" effect plays while the new deck is revealed underneath
 - **Transition Duration** ± buttons (1-10 seconds)
 - **Use Loop Video** toggle — when on, plays the designated loop video on top of all deck content; dimmed/locked when no loop video is set
+- **Overlay** enabled/disabled toggle — show or hide the overlay layer
 - Warning banner when loop video is enabled with no video selected
 - Config changes sync across all tabs via BroadcastChannel + SSE
 
-### Settings & Config
+### Settings
 
 - Videos directory and transition videos directory configurable from the UI
+- **Aspect ratio** selector — choose between 16:9, 4:3, 21:9, 1:1, or 9:16; applies to player, dashboard, and library previews
 - Config persisted in SQLite, synced to all clients via SSE
 - Graceful server shutdown from the UI
 
@@ -127,15 +146,16 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 - **Server → Browser**: Server-Sent Events (SSE) via SharedWorker (single connection shared across all tabs to stay within HTTP/1.1 connection limits)
 - **Cross-tab sync**: BroadcastChannel for instant same-browser config propagation
 - **Loop video cleanup**: server auto-clears loop video config when the file is deleted from disk
-- Event types: `deck-update`, `transition-pool`, `transition-play`, `deck-visibility`, `analysis-status`, `library-updated`, `config-updated`, `transitions-updated`
+- Event types: `deck-update`, `transition-pool`, `transition-play`, `deck-visibility`, `analysis-status`, `library-updated`, `config-updated`, `transitions-updated`, `overlay-updated`, `loop-video-transition`
 
 ### VDJ Plugin
 
 - VirtualDJ 8 DSP plugin (no audio modification — pass-through)
 - Polls deck state every 50ms in a background thread
-- Sends: deck number, filename, BPM, pitch, volume, elapsed time, playing, audible
+- Sends: deck number, filename, title, artist, BPM, pitch, volume, elapsed time, total time, playing, audible
 - Duplicate/mirrored deck detection (filters VDJ master-bus mirrors)
 - Change detection to minimize redundant HTTP traffic
+- Paused-deck seek detection (>50ms threshold to filter VDJ clock jitter)
 
 ## Project Structure
 
@@ -172,6 +192,7 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 │   │   ├── models/             # Shared data types
 │   │   ├── sse/                # Pub/sub hub for Server-Sent Events
 │   │   ├── transitions/        # Transition effects CRUD store
+│   │   ├── overlay/            # Overlay elements CRUD store
 │   │   └── video/              # Video scanner, matcher, directory watcher
 │   ├── templates/              # Templ templates (.templ → _templ.go)
 │   │   ├── layouts/            # Base HTML layout
@@ -180,7 +201,7 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
 │   └── static/
 │       ├── css/                # Tailwind CSS (input.css → output.css)
 │       └── js/
-│           ├── app.js          # All client-side logic (~2000 lines)
+│           ├── app.js          # All client-side logic (~4100 lines)
 │           └── sse-worker.js   # SharedWorker for SSE connection sharing
 │
 ├── VirtualDJ8_SDK_20211003/    # VDJ SDK headers (downloaded automatically by CI; for local builds, download manually)

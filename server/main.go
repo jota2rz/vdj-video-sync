@@ -17,6 +17,7 @@ import (
 	"github.com/jota2rz/vdj-video-sync/server/internal/config"
 	"github.com/jota2rz/vdj-video-sync/server/internal/db"
 	"github.com/jota2rz/vdj-video-sync/server/internal/handlers"
+	"github.com/jota2rz/vdj-video-sync/server/internal/overlay"
 	"github.com/jota2rz/vdj-video-sync/server/internal/sse"
 	"github.com/jota2rz/vdj-video-sync/server/internal/transitions"
 	"github.com/jota2rz/vdj-video-sync/server/internal/video"
@@ -68,9 +69,12 @@ func main() {
 	// ── Transitions Store ─────────────────────────────────
 	transStore := transitions.NewStore(database)
 
+	// ── Overlay Store ─────────────────────────────────────
+	overlayStore := overlay.NewStore(database)
+
 	// ── Routes ──────────────────────────────────────────
 	mux := http.NewServeMux()
-	h := handlers.New(cfg, hub, matcher, transitionMatcher, transStore)
+	h := handlers.New(cfg, hub, matcher, transitionMatcher, transStore, overlayStore)
 
 	// API – receives updates from VDJ plugin
 	mux.HandleFunc("POST /api/deck/update", h.HandleDeckUpdate)
@@ -82,6 +86,7 @@ func main() {
 	mux.HandleFunc("GET /dashboard", h.HandleDashboard)
 	mux.HandleFunc("GET /library", h.HandleLibrary)
 	mux.HandleFunc("GET /transitions", h.HandleTransitions)
+	mux.HandleFunc("GET /overlay", h.HandleOverlay)
 	mux.HandleFunc("GET /player", h.HandlePlayer)
 	mux.HandleFunc("GET /", h.HandleIndex)
 
@@ -100,6 +105,14 @@ func main() {
 	mux.HandleFunc("PATCH /api/transitions/{id}/toggle", h.HandleToggleTransition)
 	mux.HandleFunc("DELETE /api/transitions/{id}", h.HandleDeleteTransition)
 	mux.HandleFunc("GET /api/transitions/preview-videos", h.HandleRandomPreviewVideos)
+
+	// Overlay API
+	mux.HandleFunc("GET /api/overlays", h.HandleListOverlays)
+	mux.HandleFunc("PUT /api/overlays/{id}", h.HandleUpdateOverlay)
+	mux.HandleFunc("PATCH /api/overlays/{id}/toggle", h.HandleToggleOverlay)
+	mux.HandleFunc("POST /api/overlays/{id}/restore", h.HandleRestoreOverlay)
+	mux.HandleFunc("DELETE /api/overlays/{id}", h.HandleDeleteOverlay)
+	mux.HandleFunc("POST /api/overlays/logo", h.HandleUploadLogo)
 
 	// Graceful shutdown channel (created early so /api/shutdown can use it)
 	done := make(chan os.Signal, 1)

@@ -58,7 +58,10 @@ bool DeckState::operator==(const DeckState& o) const {
         && volume == o.volume
         && bpm == o.bpm
         && filename == o.filename
-        && pitch == o.pitch;
+        && pitch == o.pitch
+        && totalTimeMs == o.totalTimeMs
+        && title == o.title
+        && artist == o.artist;
     // elapsedMs is intentionally excluded – it changes every frame
 }
 
@@ -88,7 +91,10 @@ std::string DeckState::toJson() const {
        << "\"elapsedMs\":" << elapsedMs << ","
        << "\"bpm\":" << floatToStr(bpm) << ","
        << "\"filename\":\"" << escape(filename) << "\","
-       << "\"pitch\":" << floatToStr(pitch)
+       << "\"pitch\":" << floatToStr(pitch) << ","
+       << "\"totalTimeMs\":" << totalTimeMs << ","
+       << "\"title\":\"" << escape(title) << "\","
+       << "\"artist\":\"" << escape(artist) << "\""
        << "}";
     return ss.str();
 }
@@ -327,8 +333,13 @@ void CVideoSyncPlugin::pollLoop() {
             if (current[d].filename.empty()) continue;
             if (skip[d]) continue;
 
-            // Send if something changed OR if the deck is playing (elapsedMs updates)
-            if (current[d] != lastState_[d] || current[d].isPlaying) {
+            // Send if something changed OR if the deck is playing (elapsedMs updates).
+            // For paused decks, detect seeks (large elapsedMs jumps) but ignore
+            // tiny VDJ clock jitter (1-2ms) that would cause unnecessary traffic.
+            if (current[d] != lastState_[d]
+                || current[d].isPlaying
+                || (!current[d].isPlaying
+                    && std::abs(current[d].elapsedMs - lastState_[d].elapsedMs) > 50)) {
                 lastState_[d] = current[d];
                 sendUpdate(current[d]);
             }
@@ -380,6 +391,22 @@ DeckState CVideoSyncPlugin::readDeckState(int deck) {
     // get_pitch_value (float, centered on 100%)
     std::snprintf(query, sizeof(query), "deck %d get_pitch_value", deck);
     if (GetInfo(query, &val) == S_OK) s.pitch = val;
+
+    // get_songlength (float, seconds) → convert to ms
+    // NOTE: get_totaltime_ms returns the centiseconds *component* (0-99),
+    //       NOT total time in ms.  get_songlength returns total seconds.
+    std::snprintf(query, sizeof(query), "deck %d get_songlength", deck);
+    if (GetInfo(query, &val) == S_OK) s.totalTimeMs = static_cast<int>(val * 1000.0);
+
+    // get_title (string, song title metadata)
+    memset(buf, 0, sizeof(buf));
+    std::snprintf(query, sizeof(query), "deck %d get_title", deck);
+    if (GetStringInfo(query, buf, sizeof(buf)) == S_OK) s.title = buf;
+
+    // get_artist (string, song artist metadata)
+    memset(buf, 0, sizeof(buf));
+    std::snprintf(query, sizeof(query), "deck %d get_artist", deck);
+    if (GetStringInfo(query, buf, sizeof(buf)) == S_OK) s.artist = buf;
 
     return s;
 }

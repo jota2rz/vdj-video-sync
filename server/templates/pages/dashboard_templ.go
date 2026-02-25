@@ -99,7 +99,7 @@ func DashboardContent() templ.Component {
 			templ_7745c5c3_Var3 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<main id=\"spa-content\" class=\"flex-1 overflow-y-auto w-full mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8\"><!-- BPM Analysis Overlay --><div id=\"analysis-overlay\" class=\"hidden fixed inset-0 z-50 bg-gray-950/90 flex flex-col items-center justify-center\"><svg class=\"animate-spin h-12 w-12 text-indigo-500 mb-4\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\"><circle class=\"opacity-25\" cx=\"12\" cy=\"12\" r=\"10\" stroke=\"currentColor\" stroke-width=\"4\"></circle> <path class=\"opacity-75\" fill=\"currentColor\" d=\"M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z\"></path></svg><p class=\"text-lg text-gray-300\">Running BPM analysis…</p></div><!-- Deck Limit Warning Banner (hidden by default, shown by JS) --><div id=\"deck-limit-banner\" class=\"hidden mb-4 items-center gap-2 rounded-lg border border-amber-700 bg-amber-900/80 px-4 py-3 text-sm text-amber-200\"><svg class=\"h-5 w-5 shrink-0 text-amber-400\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path fill-rule=\"evenodd\" d=\"M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.499-2.599 4.499H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.004ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z\" clip-rule=\"evenodd\"></path></svg> <span>This software supports up to 4 decks to avoid performance issues.</span></div><!-- Deck Status + Video --><section class=\"mb-8\"><h2 class=\"text-xl font-semibold mb-4\">Deck Status</h2><div id=\"deck-status\" class=\"flex flex-col md:flex-row gap-4\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<main id=\"spa-content\" class=\"flex-1 flex flex-col overflow-hidden w-full mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8\" data-page=\"dashboard\"><!-- BPM Analysis Overlay --><div id=\"analysis-overlay\" class=\"hidden fixed inset-0 z-50 bg-gray-950/90 flex flex-col items-center justify-center\"><svg class=\"animate-spin h-12 w-12 text-indigo-500 mb-4\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\"><circle class=\"opacity-25\" cx=\"12\" cy=\"12\" r=\"10\" stroke=\"currentColor\" stroke-width=\"4\"></circle> <path class=\"opacity-75\" fill=\"currentColor\" d=\"M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z\"></path></svg><p class=\"text-lg text-gray-300\">Running BPM analysis…</p></div><!-- Deck Limit Warning Banner (hidden by default, shown by JS) --><div id=\"deck-limit-banner\" class=\"hidden shrink-0 mb-2 items-center gap-2 rounded-lg border border-amber-700 bg-amber-900/80 px-4 py-3 text-sm text-amber-200\"><svg class=\"h-5 w-5 shrink-0 text-amber-400\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path fill-rule=\"evenodd\" d=\"M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.499-2.599 4.499H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.004ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z\" clip-rule=\"evenodd\"></path></svg> <span>This software supports up to 4 decks to avoid performance issues.</span></div><!-- Deck Status + Video --><section class=\"shrink-0\"><h2 class=\"text-lg font-semibold mb-2\">Deck Status</h2><div id=\"deck-status\" class=\"flex flex-col md:flex-row gap-4\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -109,7 +109,7 @@ func DashboardContent() templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div></section><!-- Embedded Player Preview --><section class=\"mb-8\"><h2 class=\"text-xl font-semibold mb-4 text-center\">Master Video</h2><div class=\"mx-auto\" style=\"width: 50%;\"><div id=\"embedded-player\" class=\"relative rounded-lg bg-black border border-gray-800 overflow-hidden\" style=\"aspect-ratio: 16/9;\"><div id=\"embedded-no-video\" class=\"absolute inset-0 flex items-center justify-center text-gray-600 text-sm\">Waiting for track...</div></div><div id=\"player-info\" class=\"mt-2 text-xs text-gray-500 text-center\"><div class=\"flex items-center justify-center gap-6\"><span id=\"info-match\">Video Match: —</span> <span id=\"info-rate\">Playback Rate: —</span> <span id=\"info-bpm\">Master BPM: —</span></div><div id=\"info-trans-row\" class=\"mt-1 hidden\"><span id=\"info-trans-rate\">Transition Playback Rate: —</span></div></div></div></section></main>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div></section><!-- Embedded Player Preview --><section class=\"flex-1 flex flex-col min-h-0 mt-2\"><h2 class=\"shrink-0 text-lg font-semibold mb-2 text-center\">Master Video</h2><div class=\"flex-1 flex flex-col items-center min-h-0\"><div id=\"embedded-player-wrap\" class=\"flex-1 min-h-0 w-full\" style=\"max-width:50%;\"><div id=\"embedded-player\" class=\"relative rounded-lg bg-black border border-gray-800 overflow-hidden mx-auto\" data-aspect-ratio style=\"aspect-ratio: 16/9;\"><div id=\"embedded-no-video\" class=\"absolute inset-0 flex items-center justify-center text-gray-600 text-sm\">Waiting for track...</div></div></div><div id=\"player-info\" class=\"shrink-0 mt-1 text-xs text-gray-500 text-center\"><div class=\"flex items-center justify-center gap-6\"><span id=\"info-match\">Video Match: —</span> <span id=\"info-rate\">Playback Rate: —</span> <span id=\"info-bpm\">Master BPM: —</span></div><div id=\"info-trans-row\" class=\"mt-1 hidden\"><span id=\"info-trans-rate\">Transition Playback Rate: —</span></div></div></div></section></main>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -145,7 +145,7 @@ func DeckCard(deck int) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(str(deck))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/dashboard.templ`, Line: 79, Col: 31}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/dashboard.templ`, Line: 82, Col: 31}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
@@ -158,7 +158,7 @@ func DeckCard(deck int) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs("deck-" + str(deck))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/dashboard.templ`, Line: 81, Col: 27}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/dashboard.templ`, Line: 84, Col: 27}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -171,7 +171,7 @@ func DeckCard(deck int) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(str(deck))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/dashboard.templ`, Line: 82, Col: 24}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/dashboard.templ`, Line: 85, Col: 24}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -184,13 +184,13 @@ func DeckCard(deck int) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(str(deck))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/dashboard.templ`, Line: 86, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/dashboard.templ`, Line: 89, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</span> <span class=\"deck-status inline-block h-2 w-2 rounded-full bg-gray-600\"></span></div><p class=\"deck-filename text-sm font-medium truncate text-gray-500\">—</p><div class=\"mt-2 flex items-center gap-3 text-xs text-gray-500\"><span class=\"deck-bpm\">— BPM</span> <span class=\"deck-volume\">Vol: —</span> <span class=\"deck-pitch\">Pitch: —</span></div></div><div class=\"deck-video-wrap relative mt-2 rounded-lg bg-black border border-gray-800 overflow-hidden\" style=\"aspect-ratio:16/9;\"><canvas class=\"deck-canvas absolute inset-0 w-full h-full\"></canvas><div class=\"deck-no-video absolute inset-0 flex items-center justify-center text-gray-600 text-sm\">No video</div></div><p class=\"deck-match mt-1 text-xs text-gray-500 truncate text-center\">&mdash;</p><p class=\"deck-rate text-xs text-gray-500 truncate text-center\">&mdash;</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</span> <span class=\"deck-status inline-block h-2 w-2 rounded-full bg-gray-600\"></span></div><p class=\"deck-filename text-sm font-medium truncate text-gray-500\">—</p><div class=\"mt-2 flex items-center gap-3 text-xs text-gray-500\"><span class=\"deck-bpm\">— BPM</span> <span class=\"deck-volume\">Vol: —</span> <span class=\"deck-pitch\">Pitch: —</span> <span class=\"deck-time ml-auto\">00:00 / 00:00</span></div></div><div class=\"deck-video-wrap relative mt-2 rounded-lg bg-black border border-gray-800 overflow-hidden\" data-aspect-ratio style=\"aspect-ratio:16/9;\"><canvas class=\"deck-canvas absolute inset-0 w-full h-full\"></canvas><div class=\"deck-no-video absolute inset-0 flex items-center justify-center text-gray-600 text-sm\">No video</div></div><p class=\"deck-match mt-1 text-xs text-gray-500 truncate text-center\">&mdash;</p><p class=\"deck-rate text-xs text-gray-500 truncate text-center\">&mdash;</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

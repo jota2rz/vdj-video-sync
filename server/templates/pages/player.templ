@@ -6,7 +6,8 @@ import (
 
 templ Player() {
 	@layouts.Base("Player") {
-		<main id="player-container" class="relative h-screen w-screen bg-black overflow-hidden">
+		<div id="player-wrapper" class="flex-1 flex items-center justify-center bg-black w-full">
+			<main id="player-container" class="relative bg-black overflow-hidden w-full" data-aspect-ratio style="aspect-ratio:16/9;max-height:100vh;max-width:100vw;object-fit:contain;">
 			<!-- BPM Analysis Overlay -->
 			<div id="analysis-overlay" class="hidden fixed inset-0 z-50 bg-gray-950/90 flex flex-col items-center justify-center">
 				<svg class="animate-spin h-12 w-12 text-indigo-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -26,5 +27,6 @@ templ Player() {
 				Waiting for track...
 			</div>
 		</main>
+		</div>
 	}
 }

@@ -1,0 +1,165 @@
+package pages
+
+import (
+	"github.com/jota2rz/vdj-video-sync/server/templates/layouts"
+	"github.com/jota2rz/vdj-video-sync/server/templates/components"
+)
+
+templ Overlay() {
+	@layouts.Base("Overlay") {
+		@components.Header("overlay")
+		@OverlayContent()
+		@components.ControlBar()
+	}
+}
+
+templ OverlayContent() {
+	<main id="spa-content" class="flex-1 flex flex-col p-6 gap-4 overflow-hidden" data-page="overlay">
+		<div class="flex flex-1 gap-6 min-h-0">
+			<!-- Left: Overlay Data List -->
+			<div class="w-1/4 flex flex-col gap-4 min-h-0">
+				<div class="flex items-center justify-between shrink-0">
+					<h2 class="text-xl font-semibold text-white">Overlay Elements</h2>
+				</div>
+				<div id="overlay-list" class="flex flex-col gap-2 overflow-y-auto">
+					<p class="text-gray-500 text-sm">Loading…</p>
+				</div>
+			</div>
+			<!-- Right: Preview Area -->
+			<div class="w-3/4 flex flex-col gap-3 min-w-0 min-h-0">
+				<div class="flex-1 min-h-0">
+					<div id="overlay-preview-stage" class="relative bg-black rounded-lg overflow-hidden mx-auto" data-aspect-ratio style="aspect-ratio:16/9;isolation:isolate;">
+						<video id="overlay-preview-video" class="absolute inset-0 w-full h-full object-contain" muted playsinline loop autoplay></video>
+						<div id="overlay-preview-container" class="absolute inset-0 pointer-events-none"></div>
+						<style id="overlay-preview-css"></style>
+						<div id="overlay-preview-placeholder" class="absolute inset-0 flex items-center justify-center text-gray-600 text-sm">
+							Loading preview…
+						</div>
+					</div>
+				</div>
+				<div class="shrink-0 flex justify-center">
+					<button
+						id="overlay-shuffle-btn"
+						class="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors"
+						title="Pick a new random video"
+					>
+						<svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.992 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M20.016 4.656v4.992"></path>
+						</svg>
+						Shuffle Video
+					</button>
+				</div>
+			</div>
+		</div>
+
+		<!-- Edit Modal -->
+		<div id="overlay-modal" class="hidden fixed inset-0 z-[200] flex items-center justify-center">
+			<div id="overlay-modal-backdrop" class="absolute inset-0 bg-gray-950/80"></div>
+			<div class="relative w-full max-w-2xl max-h-[90vh] rounded-lg bg-gray-900 border border-gray-700 shadow-xl p-6 space-y-4 overflow-y-auto">
+				<div class="flex items-center justify-between mb-2">
+					<h3 id="overlay-modal-title" class="text-lg font-semibold text-white">Edit Overlay Element</h3>
+					<button id="overlay-modal-close" type="button" class="text-gray-400 hover:text-white">
+						<svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"></path>
+						</svg>
+					</button>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-gray-300 mb-1">Name</label>
+					<p id="overlay-name-display" class="w-full rounded-md bg-gray-800 border border-gray-700 px-3 py-2 text-sm text-gray-400"></p>
+					<input type="hidden" id="overlay-name"/>
+				</div>
+				<div class="flex items-center justify-between">
+					<div>
+						<label for="overlay-show-over-transition" class="text-sm font-medium text-gray-300">Show over Transition Video</label>
+						<p class="text-xs text-gray-500">When off, this element appears behind transition videos</p>
+					</div>
+					<button
+						id="overlay-show-over-transition"
+						type="button"
+						role="switch"
+						aria-checked="true"
+						class="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-600 transition-colors focus:outline-none"
+					>
+						<span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform translate-x-0"></span>
+					</button>
+				</div>
+				<!-- Custom Text Config (shown only for custom_text type) -->
+				<div id="overlay-config-section" class="hidden">
+					<label for="overlay-config-text" class="block text-sm font-medium text-gray-300 mb-1">Custom Text</label>
+					<input
+						type="text"
+						id="overlay-config-text"
+						class="w-full rounded-md bg-gray-800 border border-gray-700 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+						placeholder="Enter your custom text"
+					/>
+				</div>
+				<!-- Custom Logo Config (shown only for custom_logo type) -->
+				<div id="overlay-config-logo" class="hidden">
+					<label class="block text-sm font-medium text-gray-300 mb-1">Custom Logo</label>
+					<div class="flex items-center gap-3">
+						<img id="overlay-config-logo-preview" src="" alt="Logo preview" class="h-12 object-contain rounded bg-gray-800 border border-gray-700 hidden"/>
+						<label class="cursor-pointer rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors">
+							Upload PNG
+							<input type="file" id="overlay-config-logo-file" accept="image/png" class="hidden"/>
+						</label>
+						<span id="overlay-config-logo-status" class="text-xs text-gray-500"></span>
+					</div>
+					<input type="hidden" id="overlay-config-logo-url" value=""/>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-gray-300 mb-1">HTML</label>
+					<textarea
+						id="overlay-html"
+						rows="4"
+						readonly
+						class="w-full rounded-md bg-gray-800/50 border border-gray-700 px-3 py-2 text-sm text-gray-400 font-mono cursor-not-allowed focus:outline-none resize-y"
+					></textarea>
+				</div>
+				<div>
+					<label for="overlay-css" class="block text-sm font-medium text-gray-300 mb-1">CSS</label>
+					<textarea
+						id="overlay-css"
+						rows="8"
+						class="w-full rounded-md bg-gray-800 border border-gray-700 px-3 py-2 text-sm text-white font-mono placeholder-gray-500 focus:border-indigo-500 focus:outline-none resize-y"
+						placeholder=".overlay-element { ... }"
+					></textarea>
+				</div>
+				<div>
+					<label for="overlay-js" class="block text-sm font-medium text-gray-300 mb-1">JavaScript</label>
+					<textarea
+						id="overlay-js"
+						rows="6"
+						class="w-full rounded-md bg-gray-800 border border-gray-700 px-3 py-2 text-sm text-white font-mono placeholder-gray-500 focus:border-indigo-500 focus:outline-none resize-y"
+						placeholder="(function(el, deck, config) { ... })"
+					></textarea>
+				</div>
+				<div class="flex gap-3">
+					<button
+						id="overlay-modal-cancel"
+						type="button"
+						class="flex-1 rounded-md bg-gray-700 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-600 focus:outline-none"
+					>
+						Cancel
+					</button>
+					<button
+						id="overlay-modal-restore"
+						type="button"
+						class="hidden rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 focus:outline-none"
+					>
+						Restore Defaults
+					</button>
+					<button
+						id="overlay-modal-save"
+						type="button"
+						class="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 focus:outline-none"
+					>
+						Save
+					</button>
+				</div>
+				<input type="hidden" id="overlay-edit-id" value=""/>
+				<input type="hidden" id="overlay-edit-key" value=""/>
+			</div>
+		</div>
+	</main>
+}

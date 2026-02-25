@@ -8,12 +8,15 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/jota2rz/vdj-video-sync/server/internal/config"
 	"github.com/jota2rz/vdj-video-sync/server/internal/models"
+	"github.com/jota2rz/vdj-video-sync/server/internal/overlay"
 	"github.com/jota2rz/vdj-video-sync/server/internal/sse"
 	"github.com/jota2rz/vdj-video-sync/server/internal/transitions"
 	"github.com/jota2rz/vdj-video-sync/server/internal/video"
@@ -80,6 +83,13 @@ type Handlers struct {
 	// playback position server-side so all clients stay synchronised.
 	videoSyncMu sync.Mutex
 	videoSync   map[int]*deckVideoSync // keyed by deck number
+
+	// Overlay store for on-screen overlay elements.
+	overlay *overlay.Store
+
+	// Cached overlay-elements SSE event for new client sync
+	overlayCacheMu sync.RWMutex
+	overlayCache   []byte
 }
 
 // deckVideoSync tracks video playback position for match levels 2+.
@@ -108,13 +118,14 @@ type transitionPoolEntry struct {
 }
 
 // New creates a Handlers instance.
-func New(cfg *config.Config, hub *sse.Hub, matcher *video.Matcher, transitionMatcher *video.Matcher, ts *transitions.Store) *Handlers {
+func New(cfg *config.Config, hub *sse.Hub, matcher *video.Matcher, transitionMatcher *video.Matcher, ts *transitions.Store, os *overlay.Store) *Handlers {
 	return &Handlers{
 		cfg:               cfg,
 		hub:               hub,
 		matcher:           matcher,
 		transitionMatcher: transitionMatcher,
 		transitions:       ts,
+		overlay:           os,
 		lastLogState:      make(map[int]models.DeckState),
 		lastLogTime:       make(map[int]time.Time),
 		deckCache:         make(map[int][]byte),
@@ -977,6 +988,14 @@ func (h *Handlers) HandleSSE(w http.ResponseWriter, r *http.Request) {
 		w.Write(msg)
 	}
 	h.deckCacheMu.RUnlock()
+
+	// Replay overlay cache (separate lock)
+	h.overlayCacheMu.RLock()
+	if h.overlayCache != nil {
+		w.Write(h.overlayCache)
+	}
+	h.overlayCacheMu.RUnlock()
+
 	flusher.Flush()
 
 	for {
@@ -1078,6 +1097,29 @@ func (h *Handlers) HandleSetConfig(w http.ResponseWriter, r *http.Request) {
 	h.configCache[entry.Key] = sseMsg
 	h.deckCacheMu.Unlock()
 	h.hub.Broadcast("config-updated", data)
+
+	// When loop_video_enabled changes, broadcast server-chosen transition
+	// effects so all clients use the same CSS animation.
+	if entry.Key == "loop_video_enabled" {
+		action := "deactivate"
+		if entry.Value == "1" {
+			action = "activate"
+		}
+		var inCSS, outCSS string
+		if fx, err := h.transitions.RandomEnabled("in"); err == nil && fx != nil {
+			inCSS = fx.CSS
+		}
+		if fx, err := h.transitions.RandomEnabled("out"); err == nil && fx != nil {
+			outCSS = fx.CSS
+		}
+		loopPayload := struct {
+			Action string `json:"action"`
+			InCSS  string `json:"inCSS,omitempty"`
+			OutCSS string `json:"outCSS,omitempty"`
+		}{Action: action, InCSS: inCSS, OutCSS: outCSS}
+		loopData, _ := json.Marshal(loopPayload)
+		h.hub.Broadcast("loop-video-transition", loopData)
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -1268,4 +1310,188 @@ func (h *Handlers) HandleRandomPreviewVideos(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+// ── Overlay Page & API ──────────────────────────────────
+
+func (h *Handlers) broadcastOverlayUpdated() {
+	elements, err := h.overlay.List()
+	if err != nil {
+		slog.Error("overlay list for broadcast", "error", err)
+		return
+	}
+	if elements == nil {
+		elements = []models.OverlayElement{}
+	}
+	data, _ := json.Marshal(elements)
+
+	sseMsg := fmt.Appendf(nil, "event: overlay-updated\ndata: %s\n\n", data)
+	h.overlayCacheMu.Lock()
+	h.overlayCache = sseMsg
+	h.overlayCacheMu.Unlock()
+
+	h.hub.Broadcast("overlay-updated", data)
+}
+
+func (h *Handlers) HandleOverlay(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if r.Header.Get("X-SPA") != "" {
+		pages.OverlayContent().Render(r.Context(), w)
+	} else {
+		pages.Overlay().Render(r.Context(), w)
+	}
+}
+
+func (h *Handlers) HandleListOverlays(w http.ResponseWriter, r *http.Request) {
+	elements, err := h.overlay.List()
+	if err != nil {
+		slog.Error("list overlays", "error", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	if elements == nil {
+		elements = []models.OverlayElement{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(elements)
+}
+
+func (h *Handlers) HandleUpdateOverlay(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	var req struct {
+		Name               string `json:"name"`
+		CSS                string `json:"css"`
+		HTML               string `json:"html"`
+		JS                 string `json:"js"`
+		Config             string `json:"config"`
+		ShowOverTransition bool   `json:"showOverTransition"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 32768)).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	if err := h.overlay.Update(id, req.Name, req.CSS, req.HTML, req.JS, req.Config, req.ShowOverTransition); err != nil {
+		slog.Error("update overlay", "error", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	h.broadcastOverlayUpdated()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) HandleToggleOverlay(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 256)).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if err := h.overlay.SetEnabled(id, body.Enabled); err != nil {
+		slog.Error("toggle overlay", "error", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	h.broadcastOverlayUpdated()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) HandleRestoreOverlay(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	restored, err := h.overlay.RestoreDefaults(id)
+	if err != nil {
+		slog.Error("restore overlay", "error", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	h.broadcastOverlayUpdated()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(restored)
+}
+
+func (h *Handlers) HandleDeleteOverlay(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := h.overlay.Delete(id); err != nil {
+		if errors.Is(err, overlay.ErrSeedProtected) {
+			http.Error(w, "built-in overlay elements cannot be deleted", http.StatusForbidden)
+			return
+		}
+		slog.Error("delete overlay", "error", err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	h.broadcastOverlayUpdated()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) HandleUploadLogo(w http.ResponseWriter, r *http.Request) {
+	// Max 5 MB
+	if err := r.ParseMultipartForm(5 << 20); err != nil {
+		http.Error(w, "file too large (max 5 MB)", http.StatusBadRequest)
+		return
+	}
+	file, header, err := r.FormFile("logo")
+	if err != nil {
+		http.Error(w, "missing logo file", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Validate extension
+	ext := filepath.Ext(header.Filename)
+	if ext != ".png" && ext != ".PNG" {
+		http.Error(w, "only PNG files are supported", http.StatusBadRequest)
+		return
+	}
+
+	// Ensure uploads directory
+	uploadsDir := filepath.Join("static", "uploads")
+	if err := os.MkdirAll(uploadsDir, 0755); err != nil {
+		slog.Error("create uploads dir", "error", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	dst, err := os.Create(filepath.Join(uploadsDir, "logo.png"))
+	if err != nil {
+		slog.Error("create logo file", "error", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		slog.Error("write logo file", "error", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	url := "/static/uploads/logo.png"
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"url": url})
 }

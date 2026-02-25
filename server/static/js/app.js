@@ -84,6 +84,155 @@ let transitionsEnabled = true;
 let transitionVideosEnabled = true;
 let loopVideoEnabled = false;
 let loopVideoPath = ""; // path of the chosen loop video
+let overlayEnabled = true; // master overlay on/off toggle
+let aspectRatio = "16/9"; // configurable aspect ratio (e.g. "16/9", "4/3")
+
+/**
+ * Show or hide all overlay layers (player + embedded) based on `overlayEnabled`.
+ * Called when the toggle changes or config is synced.
+ */
+function updateOverlayVisibility() {
+  const layer = document.getElementById("overlay-layer");
+  const layerBehind = document.getElementById("overlay-layer-behind");
+  const css = document.getElementById("overlay-player-css");
+  if (layer) layer.style.display = overlayEnabled ? "" : "none";
+  if (layerBehind) layerBehind.style.display = overlayEnabled ? "" : "none";
+  if (css) css.disabled = !overlayEnabled;
+}
+
+// ─── Aspect Ratio + Overlay Scaling ─────────────────────
+
+/** Reference width for overlay scaling (design target = 1080p) */
+const OVERLAY_REF_WIDTH = 1920;
+
+/**
+ * Apply the current `aspectRatio` to every element with `data-aspect-ratio`
+ * and to the overlay preview stage.  Also recalculates overlay scale factors.
+ *
+ * Preview containers (overlay, library, transitions) are wrapped in
+ * `flex-1 min-h-0` parents whose height is determined by flex, not by
+ * their content.  When a tall aspect ratio would make the preview exceed
+ * that height, we constrain max-width so the element "contains" within
+ * the available space while maintaining the correct ratio.
+ */
+function applyAspectRatio(ratio) {
+  if (ratio) aspectRatio = ratio;
+  const [aw, ah] = aspectRatio.split("/").map(Number);
+
+  // All containers that opted-in via data attribute
+  document.querySelectorAll("[data-aspect-ratio]").forEach((el) => {
+    el.style.aspectRatio = aspectRatio;
+    // Reset any previous max-width containment so the next measurement
+    // reflects the unconstrained size.
+    if (el.id !== "player-container") el.style.maxWidth = "";
+  });
+
+  // Reset dashboard master video wrapper max-width (scaleDashboardVideos
+  // will recalculate it after reflow)
+  const masterWrap = document.getElementById("embedded-player-wrap");
+  if (masterWrap) masterWrap.style.maxWidth = "";
+
+  // Player container — letterbox within the viewport
+  const player = document.getElementById("player-container");
+  if (player) {
+    player.style.aspectRatio = aspectRatio;
+    // Constrain width so the aspect-ratio box fits within the viewport
+    if (aw && ah) {
+      player.style.maxWidth = `calc(100vh * ${aw} / ${ah})`;
+    }
+  }
+
+  // After reflow, check if any preview container overflows its parent and
+  // apply max-width containment to fit within the available height.
+  // Also rescale dashboard videos if the dashboard is active.
+  requestAnimationFrame(() => {
+    constrainAspectContainers(aw, ah);
+    if (_scaleDashboardHook) _scaleDashboardHook();
+    requestAnimationFrame(() => scaleOverlayContainers());
+  });
+}
+
+/**
+ * Constrain `data-aspect-ratio` preview containers so they fit within
+ * their parent's height.  If the element's natural height (based on its
+ * width and the current ratio) exceeds the parent's clientHeight, we set
+ * a max-width so the element is shorter.  `mx-auto` on the element
+ * centres it horizontally when narrower than full width.
+ */
+function constrainAspectContainers(aw, ah) {
+  if (!aw || !ah) {
+    const parts = aspectRatio.split("/").map(Number);
+    aw = parts[0]; ah = parts[1];
+  }
+  if (!aw || !ah) return;
+  document.querySelectorAll("[data-aspect-ratio]").forEach((el) => {
+    if (el.id === "player-container") return;
+    const parent = el.parentElement;
+    if (!parent) return;
+    const pH = parent.clientHeight;
+    const pW = parent.clientWidth;
+    if (pH > 0 && pW > 0 && el.offsetHeight > pH) {
+      el.style.maxWidth = `${Math.floor(pH * aw / ah)}px`;
+    }
+  });
+}
+
+/**
+ * Scale overlay containers so that pixel-based CSS (font sizes, fixed
+ * dimensions, positions) render consistently across different preview
+ * sizes and resolutions.  The overlay is authored against OVERLAY_REF_WIDTH.
+ *
+ * Uses the parent element's clientWidth as the reference so that the
+ * element's own transform/width overrides never feed back into the
+ * measurement (which was causing flicker and wrong scale on resize).
+ */
+function scaleOverlayContainers() {
+  const targets = [
+    document.getElementById("overlay-preview-container"),
+    document.getElementById("overlay-layer"),
+    document.getElementById("overlay-layer-behind"),
+  ];
+  for (const el of targets) {
+    if (!el || !el.parentElement) continue;
+    const w = el.parentElement.clientWidth;
+    if (!w) continue;
+    const scale = w / OVERLAY_REF_WIDTH;
+    el.style.transform = `scale(${scale})`;
+    el.style.transformOrigin = "top left";
+    el.style.width = `${OVERLAY_REF_WIDTH}px`;
+    el.style.height = `${Math.round(OVERLAY_REF_WIDTH * (el.parentElement.clientHeight / w))}px`;
+  }
+}
+
+/** Debounced version of scaleOverlayContainers for resize events */
+let _scaleResizeTimer = 0;
+function scaleOverlayContainersDebounced() {
+  clearTimeout(_scaleResizeTimer);
+  _scaleResizeTimer = setTimeout(() => scaleOverlayContainers(), 100);
+}
+
+/**
+ * Debounced recalculation of aspect-ratio containment + overlay scaling
+ * on window resize.  Runs globally (safe on pages without previews — the
+ * querySelectorAll simply finds nothing).
+ */
+let _aspectContainTimer = 0;
+window.addEventListener("resize", () => {
+  clearTimeout(_aspectContainTimer);
+  _aspectContainTimer = setTimeout(() => {
+    // Reset maxWidth, reflow, then re-constrain
+    document.querySelectorAll("[data-aspect-ratio]").forEach((el) => {
+      if (el.id !== "player-container") el.style.maxWidth = "";
+    });
+    const mw = document.getElementById("embedded-player-wrap");
+    if (mw) mw.style.maxWidth = "";
+    requestAnimationFrame(() => {
+      constrainAspectContainers();
+      if (_scaleDashboardHook) _scaleDashboardHook();
+      requestAnimationFrame(() => scaleOverlayContainers());
+    });
+  }, 150);
+});
 
 // BroadcastChannel for reliable cross-tab config sync within the same browser.
 // SharedWorker port broadcast may not reach tabs in different browsing context
@@ -114,6 +263,10 @@ class DeckSSE {
     this.configListeners = [];
     /** @type {((data: object) => void)[]} */
     this.transitionsUpdatedListeners = [];
+    /** @type {((data: object) => void)[]} */
+    this.overlayUpdatedListeners = [];
+    /** @type {((data: object) => void)[]} */
+    this.loopVideoTransitionListeners = [];
     /** Last transition-pool event data (for replay on late subscribers) */
     this.lastTransitionPool = null;
     /** Cached deck visibility states (for replay on late subscribers) @type {Record<number, object>} */
@@ -162,6 +315,12 @@ class DeckSSE {
         case "transitions-updated":
           this.transitionsUpdatedListeners.forEach((fn) => fn(data));
           break;
+        case "overlay-updated":
+          this.overlayUpdatedListeners.forEach((fn) => fn(data));
+          break;
+        case "loop-video-transition":
+          this.loopVideoTransitionListeners.forEach((fn) => fn(data));
+          break;
       }
     } catch (err) {
       console.error(ts(), `[sse] ${name} parse error:`, err);
@@ -174,7 +333,7 @@ class DeckSSE {
     if (typeof SharedWorker !== "undefined") {
       // Version string forces the browser to replace a stale SharedWorker
       // when the worker script changes.  Bump on every worker code change.
-      this.worker = new SharedWorker("/static/js/sse-worker.js?v=2");
+      this.worker = new SharedWorker("/static/js/sse-worker.js?v=5");
       this.worker.port.onmessage = (e) => {
         const msg = e.data;
         if (msg.type === "open") {
@@ -216,7 +375,8 @@ class DeckSSE {
     const events = [
       "deck-update", "transition-pool", "transition-play",
       "deck-visibility", "analysis-status", "library-updated",
-      "config-updated", "transitions-updated",
+      "config-updated", "transitions-updated", "overlay-updated",
+      "loop-video-transition",
     ];
     for (const name of events) {
       this.source.addEventListener(name, (e) => this._dispatch(name, e.data));
@@ -296,6 +456,26 @@ class DeckSSE {
   /** Remove a previously registered transitions-updated listener */
   offTransitionsUpdated(fn) {
     this.transitionsUpdatedListeners = this.transitionsUpdatedListeners.filter((f) => f !== fn);
+  }
+
+  /** @param {(data: object[]) => void} fn */
+  onOverlayUpdated(fn) {
+    this.overlayUpdatedListeners.push(fn);
+  }
+
+  /** Remove a previously registered overlay-updated listener */
+  offOverlayUpdated(fn) {
+    this.overlayUpdatedListeners = this.overlayUpdatedListeners.filter((f) => f !== fn);
+  }
+
+  /** @param {(data: object) => void} fn */
+  onLoopVideoTransition(fn) {
+    this.loopVideoTransitionListeners.push(fn);
+  }
+
+  /** Remove a previously registered loop-video-transition listener */
+  offLoopVideoTransition(fn) {
+    this.loopVideoTransitionListeners = this.loopVideoTransitionListeners.filter((f) => f !== fn);
   }
 }
 
@@ -420,6 +600,10 @@ const MATCH_LABELS = {
 
 // ─── Dashboard Logic ────────────────────────────────────
 
+/** Global hook so applyAspectRatio can trigger dashboard rescaling.
+ *  Set by initDashboard(), cleared on cleanup. */
+let _scaleDashboardHook = null;
+
 function initDashboard() {
   const sse = getSSE();
 
@@ -438,22 +622,79 @@ function initDashboard() {
     if (count === 0) return;
     const basis = `${100 / count}%`;
     cols.forEach(c => { c.style.flexBasis = basis; });
-    updateVideoWidths();
+    scaleDashboardVideos();
   }
 
-  /** Set per-deck video width to always be container / 4, regardless of visible deck count.
-   *  Reduced by 5% to prevent right-edge clipping from padding/borders. */
-  function updateVideoWidths() {
+  /**
+   * Scale deck-card video widths AND the Master Video wrapper so the
+   * entire dashboard fits on screen without scrollbars.
+   *
+   * Strategy:
+   *  1. Measure how much vertical space the <main> has (its clientHeight).
+   *  2. Measure the fixed-height elements (headings, info bar, banner, gaps).
+   *  3. From the remaining height, allocate space for:
+   *     a) Deck section: deck card height + deck video (aspect-ratio driven).
+   *     b) Master section: the rest.
+   *  4. Compute max video widths from the available heights using the
+   *     current aspect ratio, then cap widths so heights don't overflow.
+   */
+  function scaleDashboardVideos() {
+    const mainEl = document.getElementById("spa-content");
     const container = document.getElementById("deck-status");
-    if (!container) return;
-    const w = Math.floor(container.offsetWidth / MAX_DECKS * 0.95);
+    const masterWrap = document.getElementById("embedded-player-wrap");
+    if (!mainEl || !container) return;
+
+    const [aw, ah] = aspectRatio.split("/").map(Number);
+    if (!aw || !ah) return;
+
+    // ── Deck video widths ──
+    // Always divide by MAX_DECKS (4) so sizes stay consistent regardless
+    // of how many decks are visible, with a 5% reduction for padding.
+    const deckContainerW = container.offsetWidth;
+    let deckVideoW = Math.floor(deckContainerW / MAX_DECKS * 0.95);
+
+    // Measure a sample deck card (text portion) to know its fixed height
+    const sampleCard = container.querySelector("[data-deck]");
+    const cardH = sampleCard ? sampleCard.offsetHeight : 80;
+    // matchEl + rateEl below the video (~2 lines of text + margins)
+    const deckMetaH = 36;
+    // Calculate how much vertical space the deck section currently has
+    // (from main top to the end of the deck section, roughly):
+    // Use the main's total height minus the master section's heading + info
+    const mainH = mainEl.clientHeight;
+    // Fixed items: deck heading (~28px + 8px mb), master heading (~28px + 8px mb),
+    // player-info (~32px), padding (16px top + 16px gap + 8px mt between sections)
+    const fixedH = 28 + 8 + 28 + 8 + 40 + 16 + 8;
+    const availableForVideos = mainH - fixedH - cardH - deckMetaH;
+
+    if (availableForVideos > 0) {
+      // Split available height: ~40% for deck video, ~60% for master
+      const deckVideoMaxH = Math.floor(availableForVideos * 0.38);
+      const masterMaxH = availableForVideos - deckVideoMaxH;
+
+      // Constrain deck video width so its height (from aspect ratio) <= deckVideoMaxH
+      const deckMaxW = Math.floor(deckVideoMaxH * aw / ah);
+      deckVideoW = Math.min(deckVideoW, deckMaxW);
+
+      // Constrain master video wrapper width
+      if (masterWrap) {
+        const masterMaxW = Math.floor(masterMaxH * aw / ah);
+        // Cap at 60% of main width for aesthetics
+        const maxPercentW = Math.floor(mainEl.clientWidth * 0.6);
+        masterWrap.style.maxWidth = `${Math.min(masterMaxW, maxPercentW)}px`;
+      }
+    }
+
     container.querySelectorAll('.deck-video-wrap').forEach(el => {
-      el.style.width = `${w}px`;
+      el.style.width = `${deckVideoW}px`;
     });
   }
 
-  // Recompute video widths on window resize
-  const onResize = () => updateVideoWidths();
+  // Register global hook for applyAspectRatio
+  _scaleDashboardHook = scaleDashboardVideos;
+
+  // Recompute video sizes on window resize
+  const onResize = () => scaleDashboardVideos();
   window.addEventListener('resize', onResize);
 
   /** Ensure a deck column (card + video) exists in the DOM */
@@ -486,9 +727,10 @@ function initDashboard() {
           <span class="deck-bpm">— BPM</span>
           <span class="deck-volume">Vol: —</span>
           <span class="deck-pitch">Pitch: —</span>
+          <span class="deck-time ml-auto">00:00 / 00:00</span>
         </div>
       </div>
-      <div class="deck-video-wrap relative mt-2 rounded-lg bg-black border border-gray-800 overflow-hidden" style="aspect-ratio:16/9;">
+      <div class="deck-video-wrap relative mt-2 rounded-lg bg-black border border-gray-800 overflow-hidden" data-aspect-ratio style="aspect-ratio:${aspectRatio};">
         <canvas class="deck-canvas absolute inset-0 w-full h-full"></canvas>
         <div class="deck-no-video absolute inset-0 flex items-center justify-center text-gray-600 text-sm">No video</div>
       </div>
@@ -597,10 +839,19 @@ function initDashboard() {
       const pitchEl = card.querySelector(".deck-pitch");
       const statusEl = card.querySelector(".deck-status");
 
-      if (filenameEl) filenameEl.textContent = data.filename || "—";
+      if (filenameEl) {
+        const name = data.title || data.filename || "—";
+        filenameEl.textContent = data.artist ? `${name} - ${data.artist}` : name;
+      }
       if (bpmEl) bpmEl.textContent = data.bpm ? `${data.bpm.toFixed(1)} BPM` : "— BPM";
       if (volumeEl) volumeEl.textContent = `Vol: ${(data.volume * 100).toFixed(0)}%`;
       if (pitchEl) pitchEl.textContent = `Pitch: ${data.pitch.toFixed(1)}%`;
+
+      const timeEl = card.querySelector(".deck-time");
+      if (timeEl) {
+        const fmt = (ms) => { const s = Math.floor((ms || 0) / 1000); const m = Math.floor(s / 60); return `${String(m).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`; };
+        timeEl.textContent = `${fmt(data.elapsedMs)} / ${fmt(data.totalTimeMs)}`;
+      }
       if (statusEl) {
         statusEl.classList.toggle("bg-green-500", data.isPlaying);
         statusEl.classList.toggle("bg-yellow-500", data.isAudible && !data.isPlaying);
@@ -684,7 +935,17 @@ function initDashboard() {
         canvas.height = h;
       }
       const ctx = canvas.getContext('2d');
-      if (ctx) ctx.drawImage(srcVideo, 0, 0, w, h);
+      if (ctx) {
+        ctx.clearRect(0, 0, w, h);
+        const vw = srcVideo.videoWidth;
+        const vh = srcVideo.videoHeight;
+        if (vw && vh) {
+          const scale = Math.min(w / vw, h / vh);
+          const dw = vw * scale;
+          const dh = vh * scale;
+          ctx.drawImage(srcVideo, (w - dw) / 2, (h - dh) / 2, dw, dh);
+        }
+      }
     }
   }, 66);
 
@@ -792,8 +1053,12 @@ function initDashboard() {
     cleanupEmbeddedPlayer = initPlayer(embeddedContainer, embeddedNoVideo, onActiveDeck, onTransitionChange);
   }
 
+  // Ensure scaling runs after the flex layout has settled on first paint
+  requestAnimationFrame(() => scaleDashboardVideos());
+
   // Return cleanup function
   return () => {
+    _scaleDashboardHook = null;
     sse.offUpdate(updateDeckCard);
     sse.offUpdate(updatePlayerInfoOnSSE);
     sse.offVisibility(onDeckVisibility);
@@ -814,6 +1079,10 @@ function initControlBar() {
 
   const sse = getSSE();
 
+  // Overlay enabled toggle
+  const ovToggle = document.getElementById("overlay-enabled");
+  const ovToggleKnob = ovToggle ? ovToggle.querySelector("span") : null;
+
   // Transition enabled toggle
   const toggle = document.getElementById("transition-enabled");
   const toggleKnob = toggle ? toggle.querySelector("span") : null;
@@ -827,6 +1096,24 @@ function initControlBar() {
   const lvToggle = document.getElementById("loop-video-enabled");
   const lvToggleKnob = lvToggle ? lvToggle.querySelector("span") : null;
   const lvLabel = lvToggle ? lvToggle.closest(".flex").querySelector("label") : null;
+
+  function setOvToggleUI(enabled) {
+    if (!ovToggle) return;
+    ovToggle.setAttribute("aria-checked", enabled ? "true" : "false");
+    if (enabled) {
+      ovToggle.classList.replace("bg-gray-600", "bg-indigo-600") || ovToggle.classList.add("bg-indigo-600");
+      ovToggle.classList.remove("bg-gray-600");
+      ovToggleKnob.classList.replace("translate-x-0", "translate-x-4") || ovToggleKnob.classList.add("translate-x-4");
+      ovToggleKnob.classList.remove("translate-x-0");
+    } else {
+      ovToggle.classList.replace("bg-indigo-600", "bg-gray-600") || ovToggle.classList.add("bg-gray-600");
+      ovToggle.classList.remove("bg-indigo-600");
+      ovToggleKnob.classList.replace("translate-x-4", "translate-x-0") || ovToggleKnob.classList.add("translate-x-0");
+      ovToggleKnob.classList.remove("translate-x-4");
+    }
+    // Show/hide the actual overlay layer in the player
+    updateOverlayVisibility();
+  }
 
   function setToggleUI(enabled) {
     if (!toggle) return;
@@ -920,6 +1207,20 @@ function initControlBar() {
     }
   }
 
+  if (ovToggle) {
+    ovToggle.addEventListener("click", () => {
+      overlayEnabled = !overlayEnabled;
+      setOvToggleUI(overlayEnabled);
+      const val = overlayEnabled ? "1" : "0";
+      if (configBC) configBC.postMessage({ key: "overlay_enabled", value: val });
+      fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "overlay_enabled", value: val }),
+      }).catch((err) => console.error(ts(), "[controlbar] save error:", err));
+    });
+  }
+
   if (toggle) {
     toggle.addEventListener("click", () => {
       transitionsEnabled = !transitionsEnabled;
@@ -980,6 +1281,8 @@ function initControlBar() {
         input.value = 3;
         transitionDurationMs = 3000;
       }
+      overlayEnabled = cfg.overlay_enabled !== "0";
+      setOvToggleUI(overlayEnabled);
       transitionsEnabled = cfg.transition_enabled !== "0";
       setToggleUI(transitionsEnabled);
       transitionVideosEnabled = cfg.transition_videos_enabled !== "0";
@@ -1052,6 +1355,9 @@ function initControlBar() {
       loopVideoEnabled = data.value === "1" && !!loopVideoPath;
       setLvToggleUI(loopVideoEnabled);
       updateLvWarning();
+    } else if (data.key === "overlay_enabled") {
+      overlayEnabled = data.value !== "0";
+      setOvToggleUI(overlayEnabled);
     }
   };
   sse.onConfig(onConfigUpdate);
@@ -1614,6 +1920,102 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
   let loopVideoActive = false; // true when loop video is currently visible
   let loopVideoLoadedPath = ""; // currently loaded loop video path
 
+  // ── Overlay system ──
+  let overlayElements = []; // enabled overlay elements from server
+  let overlayLayer = null;  // <div> container for overlay elements (above transitions, z-index:100)
+  let overlayLayerBehind = null; // <div> container for overlay elements behind transitions (z-index:10)
+  let overlayStyleEl = null; // <style> tag for overlay CSS
+
+  // Create overlay layer behind transitions (z-index 16, above deck videos z=10/loop z=15, below transition video z=20)
+  overlayLayerBehind = document.createElement("div");
+  overlayLayerBehind.id = "overlay-layer-behind";
+  overlayLayerBehind.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:16;";
+  if (!overlayEnabled) overlayLayerBehind.style.display = "none";
+  container.appendChild(overlayLayerBehind);
+
+  // Create overlay layer above transitions (z-index 100, above transition video z-index 20)
+  overlayLayer = document.createElement("div");
+  overlayLayer.id = "overlay-layer";
+  overlayLayer.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:100;";
+  if (!overlayEnabled) overlayLayer.style.display = "none";
+  container.appendChild(overlayLayer);
+
+  overlayStyleEl = document.createElement("style");
+  overlayStyleEl.id = "overlay-player-css";
+  if (!overlayEnabled) overlayStyleEl.disabled = true;
+  container.appendChild(overlayStyleEl);
+
+  /** Load enabled overlay elements from server and render them */
+  function loadOverlayElements(data) {
+    // data can be either an array from SSE or null (initial load via fetch)
+    if (Array.isArray(data)) {
+      overlayElements = data.filter((e) => e.enabled);
+    } else {
+      overlayElements = data || [];
+    }
+    renderOverlayLayer();
+  }
+
+  /** Render the overlay layers — split elements by showOverTransition flag */
+  function renderOverlayLayer() {
+    if (!overlayLayer || !overlayLayerBehind) return;
+    overlayLayer.innerHTML = "";
+    overlayLayerBehind.innerHTML = "";
+    let css = "";
+    for (const el of overlayElements) {
+      css += el.css + "\n";
+      const wrapper = document.createElement("div");
+      wrapper.setAttribute("data-overlay-key", el.key);
+      wrapper.innerHTML = el.html;
+      if (el.showOverTransition === false) {
+        overlayLayerBehind.appendChild(wrapper);
+      } else {
+        overlayLayer.appendChild(wrapper);
+      }
+    }
+    if (overlayStyleEl) overlayStyleEl.textContent = css;
+
+    // Scale overlay elements to match the player container size (double-rAF for reflow)
+    requestAnimationFrame(() => requestAnimationFrame(() => scaleOverlayContainers()));
+  }
+
+  /** Deferred deck data for behind-layer overlays during transitions */
+  let pendingBehindDeckData = null;
+
+  /** Update overlay element JS with current deck data */
+  function updateOverlayData(deckData) {
+    if (overlayElements.length === 0) return;
+    if (overlayLayer) runOverlayJS(overlayLayer, overlayElements, deckData);
+    if (overlayLayerBehind) {
+      if (transitionVideosEnabled && transitionInProgress) {
+        pendingBehindDeckData = deckData;
+      } else {
+        runOverlayJS(overlayLayerBehind, overlayElements, deckData);
+      }
+    }
+  }
+
+  /** Flush deferred behind-layer overlay update after transition ends */
+  function flushPendingBehindOverlay() {
+    if (pendingBehindDeckData && overlayLayerBehind) {
+      runOverlayJS(overlayLayerBehind, overlayElements, pendingBehindDeckData);
+      pendingBehindDeckData = null;
+    }
+  }
+
+  // Fetch initial overlay elements
+  fetch("/api/overlays")
+    .then((r) => r.json())
+    .then((elements) => {
+      overlayElements = (elements || []).filter((e) => e.enabled);
+      renderOverlayLayer();
+    })
+    .catch((err) => console.error(ts(), "[player] overlay load error:", err));
+
+  // Listen for overlay updates via SSE
+  const onOverlayUpdated = (data) => loadOverlayElements(data);
+  sse.onOverlayUpdated(onOverlayUpdated);
+
   // ── Transition system ──
   //
   // Server-driven triple-buffered design:
@@ -1957,6 +2359,7 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
       transitionInProgress = false;
       playingBufferIdx = -1;
       if (onTransitionChange) onTransitionChange({ inProgress: false, rate: 0 });
+      flushPendingBehindOverlay();
       applyDeferredPool();
       // If another transition was queued, replay it now
       if (queuedTransition) {
@@ -1975,6 +2378,8 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
       outStarted = true;
       // Swap the master video while fully hidden behind transition
       ensureSwap();
+      // Transition video fully covers the screen — safe to update behind-layer overlays
+      flushPendingBehindOverlay();
       console.log(ts(), "[player] decks swapped (hidden behind transition)");
 
       // Remove "in" class (if any) now that "in" is done
@@ -2076,6 +2481,7 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
       swapFn();
       transitionInProgress = false;
       if (onTransitionChange) onTransitionChange({ inProgress: false, rate: 0 });
+      flushPendingBehindOverlay();
       applyDeferredPool();
       if (queuedTransition) {
         const q = queuedTransition;
@@ -2238,6 +2644,7 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
       if (activeDeck !== null) {
         activeDeck = null;
         if (onActiveDeckChange) onActiveDeckChange(null);
+        updateOverlayData({});
       }
       if (noVideo) noVideo.classList.remove("hidden");
     }
@@ -2265,8 +2672,9 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
     return v;
   }
 
-  /** Show loop video with a transition */
-  function activateLoopVideo() {
+  /** Show loop video with a transition.
+   *  @param {string} [inCSS] - Server-provided "in" CSS effect. If omitted, shows instantly (page load). */
+  function activateLoopVideo(inCSS) {
     if (loopVideoActive) return;
     if (!loopVideoPath) return;
     loopVideoActive = true;
@@ -2286,53 +2694,37 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
     lv.currentTime = 0;
     lv.play().catch(() => {});
 
-    // Use transition if enabled
-    if (transitionsEnabled) {
-      // The loop video appears on top via the "in" transition effect
-      pendingInCSS = "";
-      pendingOutCSS = "";
-      // Fetch a random "in" CSS effect
-      fetch("/api/transitions?direction=in")
-        .then((r) => r.json())
-        .then((effects) => {
-          const enabled = effects.filter((e) => e.enabled);
-          if (enabled.length > 0) {
-            const fx = enabled[Math.floor(Math.random() * enabled.length)];
-            const durSec = (transitionDurationMs / 1000).toFixed(2);
-            const css = fx.css.replace(/var\(--transition-duration\)/g, `${durSec}s`);
-            const fxStyle = document.createElement("style");
-            fxStyle.id = "loop-video-fx";
-            document.head.appendChild(fxStyle);
-            fxStyle.textContent = css;
-            void lv.offsetWidth;
-            lv.style.visibility = "visible";
-            lv.classList.add("transition-active");
-            const onEnd = () => {
-              lv.removeEventListener("animationend", onEnd);
-              lv.classList.remove("transition-active");
-              fxStyle.remove();
-            };
-            lv.addEventListener("animationend", onEnd);
-            setTimeout(() => {
-              lv.removeEventListener("animationend", onEnd);
-              lv.classList.remove("transition-active");
-              fxStyle.remove();
-            }, transitionDurationMs + 500);
-          } else {
-            lv.style.visibility = "visible";
-          }
-        })
-        .catch(() => {
-          lv.style.visibility = "visible";
-        });
+    // Use transition effect if CSS was provided by the server
+    if (transitionsEnabled && inCSS) {
+      const durSec = (transitionDurationMs / 1000).toFixed(2);
+      const css = inCSS.replace(/var\(--transition-duration\)/g, `${durSec}s`);
+      const fxStyle = document.createElement("style");
+      fxStyle.id = "loop-video-fx";
+      document.head.appendChild(fxStyle);
+      fxStyle.textContent = css;
+      void lv.offsetWidth;
+      lv.style.visibility = "visible";
+      lv.classList.add("transition-active");
+      const onEnd = () => {
+        lv.removeEventListener("animationend", onEnd);
+        lv.classList.remove("transition-active");
+        fxStyle.remove();
+      };
+      lv.addEventListener("animationend", onEnd);
+      setTimeout(() => {
+        lv.removeEventListener("animationend", onEnd);
+        lv.classList.remove("transition-active");
+        fxStyle.remove();
+      }, transitionDurationMs + 500);
     } else {
       lv.style.visibility = "visible";
     }
     if (noVideo) noVideo.classList.add("hidden");
   }
 
-  /** Hide loop video with a transition */
-  function deactivateLoopVideo() {
+  /** Hide loop video with a transition.
+   *  @param {string} [outCSS] - Server-provided "out" CSS effect. If omitted, hides instantly. */
+  function deactivateLoopVideo(outCSS) {
     if (!loopVideoActive) return;
     loopVideoActive = false;
     const lv = loopVideoEl;
@@ -2340,46 +2732,30 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
 
     console.log(ts(), "[player] deactivating loop video");
 
-    if (transitionsEnabled) {
-      // Use "out" effect on the loop video
-      fetch("/api/transitions?direction=out")
-        .then((r) => r.json())
-        .then((effects) => {
-          const enabled = effects.filter((e) => e.enabled);
-          if (enabled.length > 0) {
-            const fx = enabled[Math.floor(Math.random() * enabled.length)];
-            const durSec = (transitionDurationMs / 1000).toFixed(2);
-            const css = fx.css.replace(/var\(--transition-duration\)/g, `${durSec}s`);
-            const fxStyle = document.createElement("style");
-            fxStyle.id = "loop-video-fx";
-            document.head.appendChild(fxStyle);
-            fxStyle.textContent = css;
-            void lv.offsetWidth;
-            lv.classList.add("transition-active");
-            const onEnd = () => {
-              lv.removeEventListener("animationend", onEnd);
-              lv.classList.remove("transition-active");
-              fxStyle.remove();
-              lv.style.visibility = "hidden";
-              lv.pause();
-            };
-            lv.addEventListener("animationend", onEnd);
-            setTimeout(() => {
-              lv.removeEventListener("animationend", onEnd);
-              lv.classList.remove("transition-active");
-              fxStyle.remove();
-              lv.style.visibility = "hidden";
-              lv.pause();
-            }, transitionDurationMs + 500);
-          } else {
-            lv.style.visibility = "hidden";
-            lv.pause();
-          }
-        })
-        .catch(() => {
-          lv.style.visibility = "hidden";
-          lv.pause();
-        });
+    if (transitionsEnabled && outCSS) {
+      const durSec = (transitionDurationMs / 1000).toFixed(2);
+      const css = outCSS.replace(/var\(--transition-duration\)/g, `${durSec}s`);
+      const fxStyle = document.createElement("style");
+      fxStyle.id = "loop-video-fx";
+      document.head.appendChild(fxStyle);
+      fxStyle.textContent = css;
+      void lv.offsetWidth;
+      lv.classList.add("transition-active");
+      const onEnd = () => {
+        lv.removeEventListener("animationend", onEnd);
+        lv.classList.remove("transition-active");
+        fxStyle.remove();
+        lv.style.visibility = "hidden";
+        lv.pause();
+      };
+      lv.addEventListener("animationend", onEnd);
+      setTimeout(() => {
+        lv.removeEventListener("animationend", onEnd);
+        lv.classList.remove("transition-active");
+        fxStyle.remove();
+        lv.style.visibility = "hidden";
+        lv.pause();
+      }, transitionDurationMs + 500);
     } else {
       lv.style.visibility = "hidden";
       lv.pause();
@@ -2603,6 +2979,16 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
 
     // ── Recalculate which deck is visible ──
     updatePriority();
+
+    // ── Update overlay elements with active deck data ──
+    if (deck === activeDeck) {
+      // If the active deck is not audible+playing, send empty data so overlays fade out
+      if (data.isAudible && data.isPlaying) {
+        updateOverlayData(data);
+      } else {
+        updateOverlayData({});
+      }
+    }
   };
 
   /**
@@ -2639,15 +3025,25 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
     }
   }, 100);
 
-  // ── Loop video config listener ──
+  // ── Loop video config listener (path changes only) ──
   const onLoopConfigUpdate = (data) => {
-    if (data.key === "loop_video_enabled" || data.key === "loop_video") {
+    if (data.key === "loop_video") {
       // Global vars are already updated by the global applyConfig handler.
-      // Just react to the state change here.
+      // Just react to the path change here (reload video if needed).
       checkLoopVideoState();
     }
   };
   sse.onConfig(onLoopConfigUpdate);
+
+  // ── Loop video transition SSE listener (server-chosen effects) ──
+  const onLoopVideoTransition = (data) => {
+    if (data.action === "activate") {
+      activateLoopVideo(data.inCSS);
+    } else {
+      deactivateLoopVideo(data.outCSS);
+    }
+  };
+  sse.onLoopVideoTransition(onLoopVideoTransition);
 
   // Also listen on BroadcastChannel (same-browser cross-tab)
   let prevBcHandler = null;
@@ -2655,7 +3051,7 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
     prevBcHandler = configBC.onmessage;
     configBC.onmessage = (e) => {
       if (prevBcHandler) prevBcHandler(e);
-      if (e.data.key === "loop_video_enabled" || e.data.key === "loop_video") {
+      if (e.data.key === "loop_video") {
         checkLoopVideoState();
       }
     };
@@ -2666,12 +3062,19 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
     activateLoopVideo();
   }
 
+  // Rescale overlay layer on window resize
+  const onResizePlayer = () => scaleOverlayContainersDebounced();
+  window.addEventListener("resize", onResizePlayer);
+
   // ── Return cleanup function ──
   return () => {
     sse.offUpdate(onDeckUpdate);
     sse.offTransitionPool(onTransitionPool);
     sse.offTransitionPlay(onTransitionPlay);
     sse.offConfig(onLoopConfigUpdate);
+    sse.offLoopVideoTransition(onLoopVideoTransition);
+    sse.offOverlayUpdated(onOverlayUpdated);
+    window.removeEventListener("resize", onResizePlayer);
     clearInterval(safetyInterval);
     // Destroy created video elements
     for (const videoEl of Object.values(deckVideos)) {
@@ -2694,6 +3097,15 @@ function initPlayer(containerEl, noVideoEl, onActiveDeckChange, onTransitionChan
       loopVideoActive = false;
       loopVideoLoadedPath = "";
     }
+    // Destroy overlay layer
+    if (overlayLayer) {
+      overlayLayer.remove();
+      overlayLayer = null;
+    }
+    if (overlayStyleEl) {
+      overlayStyleEl.remove();
+      overlayStyleEl = null;
+    }
   };
 }
 
@@ -2710,6 +3122,445 @@ function escapeHtml(str) {
 function stripExt(name) {
   const i = name.lastIndexOf('.');
   return i > 0 ? name.substring(0, i) : name;
+}
+
+// ─── Overlay Page ───────────────────────────────────────
+
+function initOverlay() {
+  const listEl = document.getElementById("overlay-list");
+  const previewContainer = document.getElementById("overlay-preview-container");
+  const previewCss = document.getElementById("overlay-preview-css");
+  const previewVideo = document.getElementById("overlay-preview-video");
+  const previewPlaceholder = document.getElementById("overlay-preview-placeholder");
+  const modal = document.getElementById("overlay-modal");
+  const modalBackdrop = document.getElementById("overlay-modal-backdrop");
+  const modalClose = document.getElementById("overlay-modal-close");
+  const modalCancel = document.getElementById("overlay-modal-cancel");
+  const modalSave = document.getElementById("overlay-modal-save");
+  const modalRestore = document.getElementById("overlay-modal-restore");
+  const modalTitle = document.getElementById("overlay-modal-title");
+  const inputName = document.getElementById("overlay-name");
+  const inputCss = document.getElementById("overlay-css");
+  const inputHtml = document.getElementById("overlay-html");
+  const inputJs = document.getElementById("overlay-js");
+  const editId = document.getElementById("overlay-edit-id");
+  const editKey = document.getElementById("overlay-edit-key");
+  const configSection = document.getElementById("overlay-config-section");
+  const configText = document.getElementById("overlay-config-text");
+  const configLogo = document.getElementById("overlay-config-logo");
+  const configLogoFile = document.getElementById("overlay-config-logo-file");
+  const configLogoPreview = document.getElementById("overlay-config-logo-preview");
+  const configLogoUrl = document.getElementById("overlay-config-logo-url");
+  const configLogoStatus = document.getElementById("overlay-config-logo-status");
+  const showOverTransitionBtn = document.getElementById("overlay-show-over-transition");
+  let showOverTransitionValue = true;
+
+  // Toggle handler for "Show over Transition Video"
+  function setShowOverTransitionUI(on) {
+    showOverTransitionValue = on;
+    if (showOverTransitionBtn) {
+      showOverTransitionBtn.setAttribute("aria-checked", on ? "true" : "false");
+      if (on) {
+        showOverTransitionBtn.classList.replace("bg-gray-600", "bg-indigo-600") || showOverTransitionBtn.classList.add("bg-indigo-600");
+        showOverTransitionBtn.classList.remove("bg-gray-600");
+      } else {
+        showOverTransitionBtn.classList.replace("bg-indigo-600", "bg-gray-600") || showOverTransitionBtn.classList.add("bg-gray-600");
+        showOverTransitionBtn.classList.remove("bg-indigo-600");
+      }
+      const dot = showOverTransitionBtn.querySelector("span");
+      if (dot) {
+        if (on) {
+          dot.classList.replace("translate-x-0", "translate-x-5") || dot.classList.add("translate-x-5");
+          dot.classList.remove("translate-x-0");
+        } else {
+          dot.classList.replace("translate-x-5", "translate-x-0") || dot.classList.add("translate-x-0");
+          dot.classList.remove("translate-x-5");
+        }
+      }
+    }
+  }
+  if (showOverTransitionBtn) {
+    showOverTransitionBtn.addEventListener("click", () => {
+      setShowOverTransitionUI(!showOverTransitionValue);
+    });
+  }
+
+  let elements = [];
+
+  // ── Load preview video ──
+  async function loadPreviewVideo() {
+    try {
+      const res = await fetch("/api/videos");
+      const videos = await res.json();
+      if (videos && videos.length > 0) {
+        const v = videos[Math.floor(Math.random() * videos.length)];
+        previewVideo.src = v.path;
+        previewVideo.currentTime = 0;
+        previewPlaceholder.classList.add("hidden");
+        try { await previewVideo.play(); } catch (_) {}
+      }
+    } catch (err) {
+      console.error(ts(), "[overlay] preview video error:", err);
+    }
+  }
+
+  // ── Load elements ──
+  async function loadElements() {
+    try {
+      const res = await fetch("/api/overlays");
+      elements = await res.json();
+      renderList();
+      renderPreview();
+    } catch (err) {
+      console.error(ts(), "[overlay] load error:", err);
+    }
+  }
+
+  function renderList() {
+    if (!listEl) return;
+    if (elements.length === 0) {
+      listEl.innerHTML = '<p class="text-gray-500 text-sm">No overlay elements</p>';
+      return;
+    }
+    listEl.innerHTML = elements.map((e) => `
+      <div class="flex items-center justify-between rounded-lg border px-3 py-2 group cursor-pointer transition-colors hover:border-indigo-500 border-gray-800 ${!e.enabled ? "opacity-50" : ""} bg-gray-900"
+           data-overlay-id="${e.id}">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="inline-block w-2 h-2 rounded-full ${e.enabled ? "bg-green-400" : "bg-gray-600"}"></span>
+          <span class="text-sm text-gray-200 truncate">${escapeHtml(e.name)}</span>
+          ${!e.enabled ? '<span class="text-[10px] text-yellow-600 border border-yellow-800 rounded px-1">DISABLED</span>' : ""}
+        </div>
+        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button data-toggle="${e.id}" data-currently-enabled="${e.enabled}" class="p-1 ${e.enabled ? "text-green-400 hover:text-yellow-400" : "text-yellow-500 hover:text-green-400"}" title="${e.enabled ? "Disable" : "Enable"}">
+            ${e.enabled
+              ? '<svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>'
+              : '<svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>'}
+          </button>
+          <button data-edit="${e.id}" class="p-1 text-gray-400 hover:text-white" title="Edit">
+            <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+            </svg>
+          </button>
+          ${!e.isSeed ? `<button data-delete="${e.id}" class="p-1 text-gray-400 hover:text-red-400" title="Delete">
+            <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+            </svg>
+          </button>` : ""}
+        </div>
+      </div>`).join("");
+
+    // Bind click handlers
+    listEl.querySelectorAll("[data-toggle]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.toggle);
+        const currentlyEnabled = btn.dataset.currentlyEnabled === "true";
+        try {
+          await fetch(`/api/overlays/${id}/toggle`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled: !currentlyEnabled }),
+          });
+          loadElements();
+        } catch (err) {
+          console.error(ts(), "[overlay] toggle error:", err);
+        }
+      });
+    });
+
+    listEl.querySelectorAll("[data-edit]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.edit);
+        const el = elements.find((ef) => ef.id === id);
+        if (el) openModal(el);
+      });
+    });
+
+    listEl.querySelectorAll("[data-delete]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.delete);
+        if (!confirm("Delete this overlay element?")) return;
+        try {
+          const res = await fetch(`/api/overlays/${id}`, { method: "DELETE" });
+          if (res.status === 403) {
+            alert("Built-in overlay elements cannot be deleted. You can disable them instead.");
+            return;
+          }
+          loadElements();
+        } catch (err) {
+          console.error(ts(), "[overlay] delete error:", err);
+        }
+      });
+    });
+  }
+
+  // ── Render enabled overlays in preview ──
+  function renderPreview() {
+    if (!previewContainer) return;
+    previewContainer.innerHTML = "";
+    let css = "";
+    const enabled = elements.filter((e) => e.enabled);
+    for (const el of enabled) {
+      css += el.css + "\n";
+      const wrapper = document.createElement("div");
+      wrapper.setAttribute("data-overlay-key", el.key);
+      wrapper.innerHTML = el.html;
+      previewContainer.appendChild(wrapper);
+    }
+    if (previewCss) previewCss.textContent = css;
+
+    // Run JS update functions with mock deck data
+    const mockDeck = {
+      deck: 1,
+      bpm: 128.0,
+      filename: "Demo Song - Artist Name.mp4",
+      totalTimeMs: 240000,
+      title: "Demo Song",
+      artist: "Artist Name",
+      elapsedMs: 60000,
+    };
+    runOverlayJS(previewContainer, enabled, mockDeck);
+
+    // Scale overlay elements to match the preview container size (double-rAF for reflow)
+    requestAnimationFrame(() => requestAnimationFrame(() => scaleOverlayContainers()));
+  }
+
+  // ── Modal ──
+  function openModal(el) {
+    modalTitle.textContent = "Edit Overlay Element";
+    inputName.value = el.name;
+    const nameDisplay = document.getElementById("overlay-name-display");
+    if (nameDisplay) nameDisplay.textContent = el.name;
+    inputCss.value = el.css;
+    inputHtml.value = el.html;
+    inputJs.value = el.js;
+    editId.value = el.id;
+    editKey.value = el.key;
+
+    // Show config section for custom_text
+    if (el.key === "custom_text") {
+      configSection.classList.remove("hidden");
+      try {
+        const cfg = JSON.parse(el.config || "{}");
+        configText.value = cfg.text || "";
+      } catch (_) {
+        configText.value = "";
+      }
+    } else {
+      configSection.classList.add("hidden");
+      configText.value = "";
+    }
+
+    // Show config section for custom_logo
+    if (el.key === "custom_logo") {
+      configLogo.classList.remove("hidden");
+      try {
+        const cfg = JSON.parse(el.config || "{}");
+        const url = cfg.logo_url || "";
+        configLogoUrl.value = url;
+        if (url) {
+          configLogoPreview.src = url + "?t=" + Date.now();
+          configLogoPreview.classList.remove("hidden");
+        } else {
+          configLogoPreview.classList.add("hidden");
+        }
+      } catch (_) {
+        configLogoUrl.value = "";
+        configLogoPreview.classList.add("hidden");
+      }
+      configLogoStatus.textContent = "";
+    } else {
+      configLogo.classList.add("hidden");
+      configLogoUrl.value = "";
+      configLogoPreview.classList.add("hidden");
+      configLogoStatus.textContent = "";
+    }
+
+    // Show restore button for built-in elements
+    if (el.isSeed) {
+      modalRestore.classList.remove("hidden");
+    } else {
+      modalRestore.classList.add("hidden");
+    }
+
+    // Set "Show over Transition Video" toggle
+    setShowOverTransitionUI(el.showOverTransition !== false);
+
+    modal.classList.remove("hidden");
+  }
+
+  function closeModal() {
+    modal.classList.add("hidden");
+  }
+
+  async function saveElement() {
+    const id = editId.value;
+    const key = editKey.value;
+    const name = inputName.value.trim();
+    const css = inputCss.value.trim();
+    const html = inputHtml.value.trim();
+    const js = inputJs.value.trim();
+    let config = "";
+    if (key === "custom_text") {
+      config = JSON.stringify({ text: configText.value });
+    }
+    if (key === "custom_logo") {
+      config = JSON.stringify({ logo_url: configLogoUrl.value });
+    }
+    if (!name) {
+      alert("Name is required.");
+      return;
+    }
+    try {
+      await fetch(`/api/overlays/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, css, html, js, config, showOverTransition: showOverTransitionValue }),
+      });
+      closeModal();
+      loadElements();
+    } catch (err) {
+      console.error(ts(), "[overlay] save error:", err);
+      alert("Failed to save overlay element.");
+    }
+  }
+
+  async function restoreDefaults() {
+    const id = editId.value;
+    if (!confirm("Restore this element to its default settings?")) return;
+    try {
+      const res = await fetch(`/api/overlays/${id}/restore`, { method: "POST" });
+      if (res.ok) {
+        const restored = await res.json();
+        // Update modal fields with restored values
+        inputName.value = restored.name;
+        inputCss.value = restored.css;
+        inputHtml.value = restored.html;
+        inputJs.value = restored.js;
+        if (restored.key === "custom_text") {
+          try {
+            const cfg = JSON.parse(restored.config || "{}");
+            configText.value = cfg.text || "";
+          } catch (_) {
+            configText.value = "";
+          }
+        }
+        if (restored.key === "custom_logo") {
+          try {
+            const cfg = JSON.parse(restored.config || "{}");
+            configLogoUrl.value = cfg.logo_url || "";
+            configLogoPreview.classList.add("hidden");
+            configLogoStatus.textContent = "";
+          } catch (_) {
+            configLogoUrl.value = "";
+          }
+        }
+        setShowOverTransitionUI(restored.showOverTransition !== false);
+        loadElements();
+      }
+    } catch (err) {
+      console.error(ts(), "[overlay] restore error:", err);
+      alert("Failed to restore defaults.");
+    }
+  }
+
+  // ── Event Bindings ──
+  if (modalClose) modalClose.addEventListener("click", closeModal);
+  if (modalCancel) modalCancel.addEventListener("click", closeModal);
+  if (modalBackdrop) modalBackdrop.addEventListener("click", closeModal);
+  if (modalSave) modalSave.addEventListener("click", saveElement);
+  if (modalRestore) modalRestore.addEventListener("click", restoreDefaults);
+
+  // Logo file upload
+  if (configLogoFile) {
+    configLogoFile.addEventListener("change", async () => {
+      const file = configLogoFile.files[0];
+      if (!file) return;
+      configLogoStatus.textContent = "Uploading…";
+      const form = new FormData();
+      form.append("logo", file);
+      try {
+        const res = await fetch("/api/overlays/logo", { method: "POST", body: form });
+        if (!res.ok) {
+          const msg = await res.text();
+          configLogoStatus.textContent = "Error: " + msg;
+          return;
+        }
+        const data = await res.json();
+        configLogoUrl.value = data.url + "?t=" + Date.now();
+        configLogoPreview.src = configLogoUrl.value;
+        configLogoPreview.classList.remove("hidden");
+        configLogoStatus.textContent = "Uploaded ✓";
+      } catch (err) {
+        console.error(ts(), "[overlay] logo upload error:", err);
+        configLogoStatus.textContent = "Upload failed";
+      }
+      configLogoFile.value = "";
+    });
+  }
+
+  // Shuffle preview video button
+  const shuffleBtn = document.getElementById("overlay-shuffle-btn");
+  if (shuffleBtn) shuffleBtn.addEventListener("click", () => loadPreviewVideo());
+
+  // ── Init ──
+  loadElements();
+  loadPreviewVideo();
+
+  // Rescale overlay preview on window resize (debounced to avoid flicker)
+  const onResize = () => scaleOverlayContainersDebounced();
+  window.addEventListener("resize", onResize);
+
+  // SSE: reload elements when another client changes them
+  const sse = getSSE();
+  const onOverlayUpdated = () => loadElements();
+  sse.onOverlayUpdated(onOverlayUpdated);
+
+  return () => {
+    sse.offOverlayUpdated(onOverlayUpdated);
+    window.removeEventListener("resize", onResize);
+    if (previewVideo) {
+      previewVideo.pause();
+      previewVideo.removeAttribute("src");
+    }
+  };
+}
+
+/**
+ * Execute overlay JS update functions on each element's wrapper.
+ * Each element's JS is expected to be a function body that receives (el, deck, config).
+ * @param {HTMLElement} container - the overlay container
+ * @param {object[]} elements - array of enabled OverlayElement objects
+ * @param {object} deck - the current deck state data
+ */
+function runOverlayJS(container, elements, deck) {
+  if (!container) return;
+  for (const el of elements) {
+    if (!el.js) continue;
+    const wrapper = container.querySelector(`[data-overlay-key="${el.key}"]`);
+    if (!wrapper) continue;
+    try {
+      let cfg = {};
+      try { cfg = JSON.parse(el.config || "{}"); } catch (_) {}
+      const trimmed = el.js.trim();
+      if (trimmed.startsWith("(function")) {
+        // IIFE-style: evaluate to get the function reference, then call it
+        const evalFn = new Function("return " + trimmed);
+        const innerFn = evalFn();
+        if (typeof innerFn === "function") {
+          innerFn(wrapper, deck, cfg);
+        }
+      } else {
+        // Raw function body: el, deck, config are params
+        const fn = new Function("el", "deck", "config", trimmed);
+        fn(wrapper, deck, cfg);
+      }
+    } catch (err) {
+      console.error(ts(), `[overlay] JS error for ${el.key}:`, err);
+    }
+  }
 }
 
 // ─── Transitions Page ───────────────────────────────────
@@ -3184,6 +4035,11 @@ function initCurrentPage() {
         if (!loopVideoPath && loopVideoEnabled) loopVideoEnabled = false;
       } else if (key === "loop_video_enabled") {
         loopVideoEnabled = value === "1" && !!loopVideoPath;
+      } else if (key === "overlay_enabled") {
+        overlayEnabled = value !== "0";
+        updateOverlayVisibility();
+      } else if (key === "aspect_ratio") {
+        applyAspectRatio(value || "16/9");
       }
     }
 
@@ -3205,6 +4061,9 @@ function initCurrentPage() {
         transitionVideosEnabled = cfg.transition_videos_enabled !== "0";
         loopVideoPath = cfg.loop_video || "";
         loopVideoEnabled = cfg.loop_video_enabled === "1" && !!loopVideoPath;
+        overlayEnabled = cfg.overlay_enabled !== "0";
+        updateOverlayVisibility();
+        applyAspectRatio(cfg.aspect_ratio || "16/9");
       })
       .catch(() => {});
   }
@@ -3217,7 +4076,16 @@ function initCurrentPage() {
     currentPageCleanup = initPlayer();
   } else if (document.querySelector('[data-page="transitions"]')) {
     currentPageCleanup = initTransitions();
+  } else if (document.querySelector('[data-page="overlay"]')) {
+    currentPageCleanup = initOverlay();
   }
+
+  // Apply the current aspect ratio to any newly rendered data-aspect-ratio
+  // elements (SPA navigation replaces page HTML with server defaults).
+  // Called twice: once synchronously now, and once after a rAF to catch any
+  // elements created asynchronously by page-init functions.
+  applyAspectRatio();
+  requestAnimationFrame(() => applyAspectRatio());
 }
 
 // ─── Init ───────────────────────────────────────────────

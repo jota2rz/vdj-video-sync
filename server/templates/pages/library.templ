@@ -40,14 +40,16 @@ templ LibraryContent() {
 					<p class="p-4 text-gray-500 text-sm">Loading…</p>
 				</div>
 			</div>
-			<div class="w-1/2 min-w-0 flex flex-col gap-3">
-				<div class="relative aspect-video bg-black rounded-lg overflow-hidden">
-					<video id="video-preview" class="w-full h-full object-contain hidden" muted loop playsinline></video>
-					<div id="preview-placeholder" class="absolute inset-0 flex items-center justify-center text-gray-600 text-sm">
-						Select a video to preview
+			<div class="w-1/2 min-w-0 flex flex-col gap-3 min-h-0">
+				<div class="flex-1 min-h-0">
+					<div class="relative bg-black rounded-lg overflow-hidden mx-auto" data-aspect-ratio style="aspect-ratio:16/9;">
+						<video id="video-preview" class="w-full h-full object-contain hidden" muted loop playsinline></video>
+						<div id="preview-placeholder" class="absolute inset-0 flex items-center justify-center text-gray-600 text-sm">
+							Select a video to preview
+						</div>
 					</div>
 				</div>
-				<p id="preview-name" class="text-sm text-gray-300 text-center break-words hidden"></p>
+				<p id="preview-name" class="shrink-0 text-sm text-gray-300 text-center break-words hidden"></p>
 				<button
 					id="set-loop-video-btn"
 					disabled
