@@ -14,8 +14,9 @@ VDJ Plugin (C++ DLL)  ──HTTP POST──▶  Go Server  ──SSE──▶  B
         │                               │                    ├─ /dashboard
         │  deck state every 50ms        │                    ├─ /library
         │  (filename, BPM, pitch,       │                    ├─ /transitions
-        │   volume, elapsed, play/      │                    └─ /player
-        │   pause, audible)             └─ SQLite (config, BPM cache
+        │   volume, elapsed, play/      │                    ├─ /overlay
+        │   pause, audible)             │                    └─ /player
+        │                               └─ SQLite (config, BPM cache
         │                                           & transition effects)
         └── VirtualDJ 8 DSP Plugin
 ```
