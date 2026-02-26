@@ -3489,8 +3489,9 @@ function initOverlay() {
           return;
         }
         const data = await res.json();
-        configLogoUrl.value = data.url + "?t=" + Date.now();
-        configLogoPreview.src = configLogoUrl.value;
+        const logoUrl = data.url + "?t=" + Date.now();
+        configLogoUrl.value = logoUrl;
+        configLogoPreview.src = logoUrl;
         configLogoPreview.classList.remove("hidden");
         configLogoStatus.textContent = "Uploaded ✓";
       } catch (err) {
